@@ -147,6 +147,8 @@ scripts/
 db/                            # Scripts SQL à exécuter dans Cloud SQL Studio
 Dockerfile                     # Images multi-étapes, utilisateur non-root : « dev » (compose.yaml) et production (Cloud Run, sortie standalone)
 compose.yaml                   # Dev conteneurisé : code monté, node_modules dans un volume, identifiants gcloud de la machine en lecture seule
+.claude/skills/security-audit/SKILL.md # Skill Claude Code « audit de sécurité » : OWASP Top 10 / CWE, 10 règles ci-dessous, npm audit, score sur 10 et correctifs (lecture seule)
+.claude/commands/security-audit-vickayro.md # Commande /security-audit-vickayro : audit OWASP en 16 sections, copie non modifiée de github.com/VicKayro/claude-security-audit (commit 42cb302, MIT selon son README)
 .github/workflows/ci.yml       # Intégration continue : PR vers main → lint → typecheck → npm audit → build
 .github/workflows/deploy.yml   # Déploiement continu : push sur main → lint → image Docker → Cloud Run
 ```
