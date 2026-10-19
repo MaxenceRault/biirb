@@ -207,7 +207,7 @@
     "metaTitle": "Connexion",
     "fields": {
       "name": "Nom",
-      "namePlaceholder": "Kyky DeBondy",
+      "namePlaceholder": "Camille Martin",
       "email": "Adresse email",
       "emailPlaceholder": "vous@exemple.com",
       "password": "Mot de passe",
