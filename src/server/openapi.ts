@@ -505,13 +505,18 @@ export function buildOpenApiDocument() {
           tags: ["Voyages"],
           summary: "Générer un voyage avec l'IA",
           description:
-            "Posts filtrés par lieu (destination ou tags) et par archetype, puis envoyés à Gemini (15 max). " +
+            "1 à 8 étapes (Biirbou en fait le parcours le plus logique), et envies facultatives du voyageur (1000 caractères, filtrées contre l'injection de prompt). " +
+            "Posts filtrés par étape (destination ou tags) et par archetype, puis envoyés à Gemini (15 max). " +
             "Réponse de l'IA revalidée côté serveur. Rien n'est enregistré si l'IA échoue.",
           security: [{ bearerAuth: [] }],
           requestBody: requestBody(createTripSchema),
           responses: {
-            201: json("Voyage créé", { type: "object", properties: { id: { type: "integer" } } }),
-            400: error("Champ invalide, ou voyage de plus d'1 mois (31 jours)", ["INVALID_INPUT", "TRIP_TOO_LONG"]),
+            201: json("Voyage créé (identifiant public)", { type: "object", properties: { id: { type: "string", format: "uuid" } } }),
+            400: error("Champ invalide, voyage de plus de 3 mois (92 jours), ou envies refusées (injection)", [
+              "INVALID_INPUT",
+              "TRIP_TOO_LONG",
+              "INSTRUCTIONS_REJECTED",
+            ]),
             401: unauthorized,
             429: aiRateLimited,
             503: aiUnavailable,

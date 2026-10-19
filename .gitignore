@@ -44,3 +44,6 @@ next-env.d.ts
 
 # Notes personnelles sur les choix techniques (non versionnées)
 /EXPLICATIONS.md
+
+# Worker de la carte, copié depuis node_modules (scripts/copy-maplibre-worker.mjs)
+/public/maplibre/

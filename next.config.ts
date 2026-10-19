@@ -12,7 +12,8 @@ const contentSecurityPolicy = [
   // blob: aperçu photo de l'éditeur ; data: icônes de Swagger UI (dev).
   "img-src 'self' data: blob: https://images.unsplash.com https://storage.googleapis.com",
   "font-src 'self'",
-  `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
+  // Carte du voyage (MapLibre) : style, tuiles, polices et icônes d'OpenFreeMap. Son worker est servi par le site ('self').
+  `connect-src 'self' https://tiles.openfreemap.org${isDev ? " ws: wss:" : ""}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

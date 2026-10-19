@@ -15,11 +15,15 @@ export type TripSummary = {
   end_date: string;
   archetype: { slug: string; label: string };
   item_count: number;
+  // Nombre d'étapes (trip_destination) : la première est destination_*.
+  destination_count: number;
   created_at: string;
   // Voyages partagés : le rôle de l'utilisateur et le propriétaire.
   role: TripAccessRole;
   owner_name: string;
 };
+
+export type TripDestinationRow = { country_code: string; state_code: string | null; city: string | null };
 
 export type TripRow = Omit<TripSummary, "item_count" | "role" | "owner_name"> & {
   user_id: string;
@@ -32,7 +36,15 @@ export type TripRow = Omit<TripSummary, "item_count" | "role" | "owner_name"> & 
   source_post_count: number;
   generated_at: string | null;
   season_note: string | null;
+  // Étapes choisies, dans l'ordre de saisie.
+  destinations: TripDestinationRow[];
+  instructions: string | null;
+  traveler_count: number;
+  // Villes où séjourne le voyageur (carte) : vide pour un voyage généré avant la carte.
+  stops: TripStopRow[];
 };
+
+export type TripStopRow = { name: string; country_code: string; latitude: number; longitude: number; start_day: string; end_day: string };
 
 export type TripItemRow = {
   id: number;
@@ -51,12 +63,13 @@ export type TripTaskRow = { id: number; label: string; detail: string | null; do
 export type NewTrip = {
   user_id: string;
   title: string;
-  destination_country_code: string;
-  destination_state_code: string | null;
-  destination_city: string | null;
+  // La première étape devient trip.destination_*.
+  destinations: TripDestinationRow[];
   start_date: string;
   end_date: string;
   archetype_id: number;
+  instructions: string | null;
+  traveler_count: number;
 };
 
 export type TripPlan = {
@@ -65,6 +78,7 @@ export type TripPlan = {
   budget: { lodging: number; transit: number; dining: number; activities: number };
   source_post_count: number;
   season_note: string | null;
+  stops: TripStopRow[];
 };
 
 export type TripChanges = Partial<{
@@ -121,32 +135,56 @@ const ITEM_COLUMNS = ["day", "start_time", "title", "description", "category", "
 const TASK_COLUMNS = ["label", "done"] as const;
 
 const TRIP_SUMMARY_COLUMNS = `t.public_id as id, t.title, t.destination_country_code, t.destination_state_code, t.destination_city,
-  t.start_date, t.end_date, json_build_object('slug', a.slug, 'label', a.label) as archetype, t.created_at`;
+  t.start_date, t.end_date, json_build_object('slug', a.slug, 'label', a.label) as archetype, t.created_at,
+  (select count(*)::int from trip_destination d where d.trip_id = t.id) as destination_count`;
 
 // Postgres renvoie « HH:MM:SS ».
 const ITEM_COLUMNS_SELECT = `i.id, i.day, to_char(i.start_time, 'HH24:MI') as start_time, i.title, i.description, i.category, i.color,
   case when p.id is null then null else json_build_object('id', p.id, 'title', p.title, 'slug', p.slug) end as source_post`;
 
-// Clé interne (suite du traitement) et identifiant public (renvoyé au client).
+// Clé interne (suite du traitement) et identifiant public (renvoyé au client). Voyage et étapes dans une transaction.
 export async function insertTrip(trip: NewTrip): Promise<{ id: number; publicId: string }> {
-  const db = await getDb();
-  const { rows } = await db.query<{ id: number; public_id: string }>(
-    `insert into trip (user_id, title, destination_country_code, destination_state_code, destination_city,
-       start_date, end_date, archetype_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
-     returning id, public_id`,
-    [
-      trip.user_id,
-      trip.title,
-      trip.destination_country_code,
-      trip.destination_state_code,
-      trip.destination_city,
-      trip.start_date,
-      trip.end_date,
-      trip.archetype_id,
-    ],
-  );
-  return { id: rows[0].id, publicId: rows[0].public_id };
+  const [first] = trip.destinations;
+  const client = await (await getDb()).connect();
+  try {
+    await client.query("begin");
+    const { rows } = await client.query<{ id: number; public_id: string }>(
+      `insert into trip (user_id, title, destination_country_code, destination_state_code, destination_city,
+         start_date, end_date, archetype_id, instructions, traveler_count)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       returning id, public_id`,
+      [
+        trip.user_id,
+        trip.title,
+        first.country_code,
+        first.state_code,
+        first.city,
+        trip.start_date,
+        trip.end_date,
+        trip.archetype_id,
+        trip.instructions,
+        trip.traveler_count,
+      ],
+    );
+    await client.query(
+      `insert into trip_destination (trip_id, position, country_code, state_code, city)
+       select $1, position, country_code, state_code, city
+         from unnest($2::char(2)[], $3::varchar[], $4::varchar[]) with ordinality as d (country_code, state_code, city, position)`,
+      [
+        rows[0].id,
+        trip.destinations.map((place) => place.country_code),
+        trip.destinations.map((place) => place.state_code),
+        trip.destinations.map((place) => place.city),
+      ],
+    );
+    await client.query("commit");
+    return { id: rows[0].id, publicId: rows[0].public_id };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // null : aucun voyage avec cet identifiant public.
@@ -177,7 +215,18 @@ export async function findTripById(id: number): Promise<TripRow | null> {
   const db = await getDb();
   const { rows } = await db.query<TripRow>(
     `select ${TRIP_SUMMARY_COLUMNS}, t.user_id, t.archetype_id, t.budget_lodging, t.budget_transit, t.budget_dining,
-       t.budget_activities, t.budget_target, t.source_post_count, t.generated_at, t.season_note
+       t.budget_activities, t.budget_target, t.source_post_count, t.generated_at, t.season_note, t.instructions, t.traveler_count,
+       coalesce(
+         (select json_agg(json_build_object('name', s.name, 'country_code', s.country_code, 'latitude', s.latitude,
+                   'longitude', s.longitude, 'start_day', s.start_day, 'end_day', s.end_day) order by s.position)
+            from trip_stop s where s.trip_id = t.id),
+         '[]'
+       ) as stops,
+       coalesce(
+         (select json_agg(json_build_object('country_code', d.country_code, 'state_code', d.state_code, 'city', d.city) order by d.position)
+            from trip_destination d where d.trip_id = t.id),
+         '[]'
+       ) as destinations
      from trip t join archetype a on a.id = t.archetype_id
      where t.id = $1`,
     [id],
@@ -229,6 +278,25 @@ export async function replaceTripPlan(tripId: number, plan: TripPlan) {
     await client.query("begin");
     await client.query("delete from trip_item where trip_id = $1", [tripId]);
     await client.query("delete from trip_task where trip_id = $1", [tripId]);
+    await client.query("delete from trip_stop where trip_id = $1", [tripId]);
+
+    if (plan.stops.length > 0) {
+      await client.query(
+        `insert into trip_stop (trip_id, position, name, country_code, latitude, longitude, start_day, end_day)
+         select $1, position, name, country_code, latitude, longitude, start_day, end_day
+           from unnest($2::varchar[], $3::char(2)[], $4::float8[], $5::float8[], $6::date[], $7::date[])
+             with ordinality as s (name, country_code, latitude, longitude, start_day, end_day, position)`,
+        [
+          tripId,
+          plan.stops.map((stop) => stop.name),
+          plan.stops.map((stop) => stop.country_code),
+          plan.stops.map((stop) => stop.latitude),
+          plan.stops.map((stop) => stop.longitude),
+          plan.stops.map((stop) => stop.start_day),
+          plan.stops.map((stop) => stop.end_day),
+        ],
+      );
+    }
 
     if (plan.items.length > 0) {
       await client.query(

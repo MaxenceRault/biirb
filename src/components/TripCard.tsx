@@ -16,6 +16,8 @@ export type TripSummary = {
   end_date: string;
   archetype: Archetype;
   item_count: number;
+  // Étapes de l'itinéraire (1 : destination seule).
+  destination_count: number;
   // Voyage partagé avec l'utilisateur : son rôle et le propriétaire (absents hors du planificateur).
   role?: "owner" | "editor" | "viewer";
   owner_name?: string;
@@ -35,6 +37,7 @@ export function TripCard({ trip }: { trip: TripSummary }) {
           <span className="font-display text-label-sm text-ink-soft uppercase">
             {flagEmoji(trip.destination_country_code)}{" "}
             {trip.destination_city ?? countryName(trip.destination_country_code, "fr")}
+            {trip.destination_count > 1 && ` ${t("trip.moreStops", { count: trip.destination_count - 1 })}`}
           </span>
           {trip.role && trip.role !== "owner" && (
             <Badge tone="accent">

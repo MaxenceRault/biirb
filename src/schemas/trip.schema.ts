@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { archetypeSlugSchema } from "@/schemas/archetype.schema";
+import { TRIP_MAX_TRAVELERS } from "@/schemas/trip-share.schema";
 
-// 1 mois maximum, début et fin inclus.
-export const TRIP_MAX_DAYS = 31;
+// 3 mois maximum, début et fin inclus (même limite que la contrainte SQL trip_max_length_check).
+export const TRIP_MAX_DAYS = 92;
 export const TRIP_ITEM_CATEGORIES = ["transport", "lodging", "activity", "food"] as const;
 // Couleur d'une case (vue Tableau, PDF) : mêmes clés que la contrainte SQL et les tokens --color-cell-* de globals.css.
 export const TRIP_ITEM_COLORS = ["coral", "sky", "mint", "sun", "lavender", "sand", "rose", "slate"] as const;
@@ -10,6 +11,9 @@ export const TRIP_SUGGESTION_ACTIONS = ["add", "update", "delete"] as const;
 export const TRIP_PDF_TEMPLATES = ["classic", "table", "booklet"] as const;
 // Court : limite le coût par message.
 export const TRIP_MESSAGE_MAX = 500;
+// Mêmes limites que trip_destination et trip.instructions (db/migrations).
+export const TRIP_MAX_DESTINATIONS = 8;
+export const TRIP_INSTRUCTIONS_MAX = 1000;
 
 const countryCode = z.string().regex(/^[A-Z]{2}$/);
 const stateCode = z.string().regex(/^[A-Za-z0-9-]{1,10}$/);
@@ -24,18 +28,30 @@ export const tripIdParamSchema = z.uuid();
 // Jour d'un voyage dans l'URL (AAAA-MM-JJ).
 export const dayParamSchema = isoDate;
 
+// Étape du voyage : un lieu de country-state-city (ville → région obligatoire).
+const tripDestinationSchema = z
+  .strictObject({ country: countryCode, state: stateCode.optional(), city: cityName.optional() })
+  .refine((place) => !place.city || place.state, { path: ["city"] });
+
 export const createTripSchema = z
   .strictObject({
-    destinationCountry: countryCode,
-    destinationState: stateCode.optional(),
-    destinationCity: cityName.optional(),
+    // La première est la destination principale (cartes) ; Biirbou construit le parcours le plus logique.
+    destinations: z.array(tripDestinationSchema).min(1).max(TRIP_MAX_DESTINATIONS),
     startDate: isoDate,
     endDate: isoDate,
     archetype: archetypeSlugSchema,
+    // Pour le budget, l'hébergement et le rythme proposés par l'IA (même limite que le partage du voyage).
+    travelers: z.number().int().min(1).max(TRIP_MAX_TRAVELERS),
+    // Envies du voyageur pour Biirbou : donnée non fiable (filtrée et cadrée dans trip.service).
+    instructions: z
+      .string()
+      .trim()
+      .max(TRIP_INSTRUCTIONS_MAX)
+      .transform((value) => value || undefined)
+      .optional(),
   })
   // Dates AAAA-MM-JJ : l'ordre des chaînes est chronologique.
-  .refine((trip) => trip.endDate >= trip.startDate, { path: ["endDate"] })
-  .refine((trip) => !trip.destinationCity || trip.destinationState, { path: ["destinationCity"] });
+  .refine((trip) => trip.endDate >= trip.startDate, { path: ["endDate"] });
 
 export const updateTripSchema = z
   .strictObject({
@@ -100,6 +116,7 @@ export const updateTripTaskSchema = z
   .refine((changes) => Object.keys(changes).length > 0);
 
 export type CreateTripInput = z.infer<typeof createTripSchema>;
+export type TripDestinationInput = z.infer<typeof tripDestinationSchema>;
 export type UpdateTripInput = z.infer<typeof updateTripSchema>;
 export type CreateTripItemInput = z.infer<typeof createTripItemSchema>;
 export type UpdateTripItemInput = z.infer<typeof updateTripItemSchema>;
