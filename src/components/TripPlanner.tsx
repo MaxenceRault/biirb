@@ -316,9 +316,6 @@ export function TripPlanner({ tripId }: { tripId: string }) {
             onLocked={setPassFeature}
           />
           <aside className="flex flex-col gap-6">
-            {!pass.active && <TripPassCard pass={pass} onOpen={() => setPassFeature("info")} />}
-            <TaskChecklist tasks={tasks} mutate={mutate} canEdit={canEdit} />
-            <BudgetCard trip={trip} mutate={mutate} canEdit={canEdit} />
             <TripChat
               basePath={basePath}
               trip={trip}
@@ -329,6 +326,9 @@ export function TripPlanner({ tripId }: { tripId: string }) {
               passActive={pass.active}
               onUpsell={setPassFeature}
             />
+            {!pass.active && <TripPassCard pass={pass} onOpen={() => setPassFeature("info")} />}
+            <TaskChecklist tasks={tasks} mutate={mutate} canEdit={canEdit} />
+            <BudgetCard trip={trip} mutate={mutate} canEdit={canEdit} />
           </aside>
         </div>
       )}
