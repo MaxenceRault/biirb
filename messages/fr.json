@@ -26,6 +26,8 @@
     "title": "Les derniers voyages de la communauté",
     "archetypesLabel": "Filtrer par type de récit",
     "allArchetypes": "Tendances",
+    "moreArchetypes": "{count, plural, one {# autre type} other {# autres types}}",
+    "fewerArchetypes": "Moins de types",
     "empty": "Aucun post pour le moment.",
     "error": "Impossible de charger les posts. Réessayez plus tard.",
     "newPost": "Nouveau post",
@@ -205,7 +207,7 @@
     "metaTitle": "Connexion",
     "fields": {
       "name": "Nom",
-      "namePlaceholder": "Kyky DeBondy",
+      "namePlaceholder": "Camille Martin",
       "email": "Adresse email",
       "emailPlaceholder": "vous@exemple.com",
       "password": "Mot de passe",
@@ -333,20 +335,35 @@
   },
   "TripContextBar": {
     "destination": "Destination",
+    "destinations": "Étapes du voyage",
     "destinationPlaceholder": "Ville ou pays…",
+    "destinationAddPlaceholder": "Ajouter une étape…",
+    "destinationRemove": "Retirer {place}",
+    "destinationsFull": "{max} étapes maximum",
     "destinationPick": "Choisissez une destination dans la liste.",
     "timeline": "Dates du voyage",
     "archetype": "Type de récit",
     "archetypePlaceholder": "Choisir un type",
+    "travelers": "Voyageurs",
+    "travelersCount": "{count, plural, one {# voyageur} other {# voyageurs}}",
     "placesError": "Impossible de charger les lieux. Réessayez."
   },
   "Planner": {
+    "map": {
+      "title": "Carte du voyage",
+      "label": "Carte des étapes du voyage",
+      "error": "La carte n'a pas pu se charger. Réessayez plus tard."
+    },
     "metaTitle": "Planificateur",
     "heading": "Mes voyages",
     "subheading": "Choisissez une destination, vos dates et votre style de voyage : Biirbou compose un planning à partir des récits de la communauté.",
     "create": {
       "title": "Nouveau voyage",
       "submit": "Planifier mon voyage avec Biirbou",
+      "wishesLabel": "Vos envies pour Biirbou (facultatif)",
+      "wishesPlaceholder": "Ex. : Je veux traverser le Japon du nord au sud, de Sapporo à Fukuoka en passant par Tokyo et Kyoto. Le 12 avril j'ai déjà réservé un ryokan à Hakone.",
+      "wishesHint": "Ordre de visite, villes à ne pas manquer, jours déjà prévus, rythme, budget : Biirbou en tient compte et compose le parcours le plus logique.",
+      "wishesCount": "{count}/{max}",
       "reasoning": [
         "Biirbou déploie ses ailes",
         "Biirbou survole les récits de la communauté",
@@ -370,6 +387,11 @@
       "loadError": "Impossible de charger vos voyages. Réessayez."
     },
     "trip": {
+      "route": "Étapes :",
+      "travelers": "{count, plural, one {# voyageur} other {# voyageurs}}",
+      "moreStops": "{count, plural, one {+ # étape} other {+ # étapes}}",
+      "wishesTitle": "Vos envies pour Biirbou",
+      "defaultTitle": "{destination} en {count, plural, one {# jour} other {# jours}}",
       "breadcrumb": "Mes voyages",
       "editTitle": "Modifier le titre",
       "titleLabel": "Titre du voyage",
@@ -492,7 +514,8 @@
     },
     "errors": {
       "INVALID_INPUT": "Vérifiez les champs du formulaire.",
-      "TRIP_TOO_LONG": "Un voyage dure 1 mois maximum : raccourcissez les dates.",
+      "TRIP_TOO_LONG": "Un voyage dure 3 mois maximum : raccourcissez les dates.",
+      "INSTRUCTIONS_REJECTED": "Biirbou ne peut pas suivre ces envies : décrivez simplement votre voyage (étapes, dates, activités prévues).",
       "TOO_MANY_REQUESTS": "Trop de demandes à Biirbou. Réessayez dans une heure.",
       "AI_UNAVAILABLE": "Biirbou n'a pas pu générer le planning. Réessayez dans un instant.",
       "NOT_FOUND": "Élément introuvable.",
@@ -750,7 +773,7 @@
     "pickStart": "Choisissez la date de départ.",
     "pickEnd": "Choisissez la date de retour.",
     "pickEndMax": "Choisissez la date de retour : jusqu'au {last} ({max} jours maximum après le départ).",
-    "tooLong": "Un voyage dure 1 mois maximum après le départ : retour au plus tard le {last}.",
+    "tooLong": "Un voyage dure 3 mois maximum après le départ : retour au plus tard le {last}.",
     "selected": "{count, plural, one {# jour} other {# jours}}",
     "required": "Choisissez une date de départ et une date de retour.",
     "clear": "Effacer",

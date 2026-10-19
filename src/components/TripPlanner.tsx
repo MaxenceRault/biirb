@@ -20,6 +20,7 @@ import type { Archetype } from "@/lib/posts";
 import { apiDownload, apiFetch, getSessionSnapshot, parseSessionUser } from "@/client/session";
 import { TripExpenses } from "@/components/TripExpenses";
 import { useOnline } from "@/client/hooks/useOnline";
+import { TripMap, type TripMapData } from "@/components/TripMap";
 import { TripSharePanel, type TripRole } from "@/components/TripSharePanel";
 import { buildTripCsv, downloadFile } from "@/client/tripExport";
 import { TripPassCard, TripPassDialog, type TripPass, type TripPassFeature } from "@/components/TripPassCard";
@@ -49,6 +50,11 @@ export type Trip = {
   generated_at: string | null;
   // null pour un voyage généré avant l'ajout des notes de saison.
   season_note: string | null;
+  // Étapes choisies (ordre de saisie ; la première est destination_*). Biirbou décide du parcours.
+  destinations: { country_code: string; state_code: string | null; city: string | null }[];
+  // Envies données à Biirbou à la création.
+  instructions: string | null;
+  traveler_count: number;
 };
 
 export type TripItem = {
@@ -80,6 +86,8 @@ export type TripDetail = {
   mapsUrls: Record<string, string> | null;
   // Requêtes IA du jour de l'utilisateur (limit null : illimité).
   aiQuota: { used: number; limit: number | null };
+  // Carte : villes citées dans le planning, avec leurs jours.
+  map: TripMapData;
 };
 
 type TripSuggestion = Omit<TripItem, "id" | "color"> & {
@@ -105,6 +113,7 @@ const CHAT_MESSAGE_MAX = 500;
 const PLANNER_ERRORS = [
   "INVALID_INPUT",
   "TRIP_TOO_LONG",
+  "INSTRUCTIONS_REJECTED",
   "TOO_MANY_REQUESTS",
   "AI_UNAVAILABLE",
   "CHAT_LIMIT_REACHED",
@@ -241,7 +250,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     );
   }
 
-  const { trip, items, tasks, role, pass, chatLimit, mapsUrls, aiQuota } = state.data;
+  const { trip, items, tasks, role, pass, chatLimit, mapsUrls, aiQuota, map } = state.data;
   // Lecteur : consultation seule (l'API refuse de toute façon les modifications).
   const canEdit = role !== "viewer";
 
@@ -306,19 +315,20 @@ export function TripPlanner({ tripId }: { tripId: string }) {
         />
       ) : (
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-          <DayPlanner
-            trip={trip}
-            items={items}
-            mutate={mutate}
-            canEdit={canEdit}
-            passActive={pass.active}
-            mapsUrls={mapsUrls}
-            onLocked={setPassFeature}
-          />
+          <div className="flex min-w-0 flex-col gap-6">
+            <DayPlanner
+              trip={trip}
+              items={items}
+              mutate={mutate}
+              canEdit={canEdit}
+              passActive={pass.active}
+              mapsUrls={mapsUrls}
+              onLocked={setPassFeature}
+            />
+            {/* Tuiles en ligne uniquement : rien hors connexion. */}
+            {online && <TripMap map={map} />}
+          </div>
           <aside className="flex flex-col gap-6">
-            {!pass.active && <TripPassCard pass={pass} onOpen={() => setPassFeature("info")} />}
-            <TaskChecklist tasks={tasks} mutate={mutate} canEdit={canEdit} />
-            <BudgetCard trip={trip} mutate={mutate} canEdit={canEdit} />
             <TripChat
               basePath={basePath}
               trip={trip}
@@ -329,6 +339,9 @@ export function TripPlanner({ tripId }: { tripId: string }) {
               passActive={pass.active}
               onUpsell={setPassFeature}
             />
+            {!pass.active && <TripPassCard pass={pass} onOpen={() => setPassFeature("info")} />}
+            <TaskChecklist tasks={tasks} mutate={mutate} canEdit={canEdit} />
+            <BudgetCard trip={trip} mutate={mutate} canEdit={canEdit} />
           </aside>
         </div>
       )}
@@ -541,7 +554,14 @@ function TripHeader({
             year: "numeric",
           })}
         </Chip>
+        {trip.destinations.length > 1 && (
+          <Chip icon="pin">
+            <span className="sr-only">{t("trip.route")} </span>
+            {trip.destinations.map((place) => place.city ?? countryName(place.country_code, "fr")).join(" · ")}
+          </Chip>
+        )}
         <Chip icon="category">{trip.archetype.label}</Chip>
+        <Chip icon="group">{t("trip.travelers", { count: trip.traveler_count })}</Chip>
         <Chip icon="book">
           {trip.budget_target === null
             ? t("trip.budgetChip", { total })
@@ -568,6 +588,13 @@ function TripHeader({
           <span aria-live="polite">{copied ? t("trip.idCopied") : t("trip.copyId")}</span>
         </button>
       </p>
+
+      {trip.instructions && (
+        <details className="rounded-lg bg-surface-muted p-4 text-body-sm text-ink-soft">
+          <summary className="cursor-pointer font-display text-label-lg text-ink">{t("trip.wishesTitle")}</summary>
+          <p className="mt-2 whitespace-pre-line">{trip.instructions}</p>
+        </details>
+      )}
 
       {trip.season_note && (
         <div className="flex gap-3 rounded-lg bg-surface-muted p-4">
