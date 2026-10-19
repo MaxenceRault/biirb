@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { FeedFilterLink } from "@/components/FeedFilterLink";
+import { HomeArchetypeMore } from "@/components/HomeArchetypeMore";
 import { buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
@@ -26,28 +27,43 @@ function SidebarSection({ title, children }: { title: string; children: ReactNod
 
 // Colonne de gauche (grand écran) : remplace les pastilles horizontales du feed.
 // active : undefined = « Tendances » ; null = aucun (résultats de recherche).
+// Types les plus utilisés affichés (liste déjà triée par le serveur), les autres repliés.
+const VISIBLE_ARCHETYPES = 8;
+
 export function HomeArchetypeNav({ archetypes, active }: { archetypes: Archetype[]; active: string | null | undefined }) {
   const t = useTranslations("Home");
   const links = [
     { key: "all", label: t("allArchetypes"), href: "/", isActive: active === undefined },
     ...archetypes.map(({ slug, label }) => ({ key: slug, label, href: `/?archetype=${slug}`, isActive: active === slug })),
   ];
+  const visible = links.slice(0, VISIBLE_ARCHETYPES + 1);
+  const more = links.slice(VISIBLE_ARCHETYPES + 1);
+
+  const renderLinks = (list: typeof links) => (
+    <ul className="flex flex-col gap-1">
+      {list.map((link) => (
+        <li key={link.key}>
+          <FeedFilterLink href={link.href} aria-current={link.isActive ? "page" : undefined} className={sidebarLinkClassName(link.isActive)}>
+            {link.label}
+          </FeedFilterLink>
+        </li>
+      ))}
+    </ul>
+  );
 
   return (
-    <nav aria-label={t("archetypesLabel")}>
-      <ul className="flex flex-col gap-1">
-        {links.map((link) => (
-          <li key={link.key}>
-            <FeedFilterLink
-              href={link.href}
-              aria-current={link.isActive ? "page" : undefined}
-              className={sidebarLinkClassName(link.isActive)}
-            >
-              {link.label}
-            </FeedFilterLink>
-          </li>
-        ))}
-      </ul>
+    <nav aria-label={t("archetypesLabel")} className="flex flex-col gap-1">
+      {renderLinks(visible)}
+      {more.length > 0 && (
+        // Ouvert d'office si le type affiché est dans la partie repliée.
+        <HomeArchetypeMore
+          moreLabel={t("moreArchetypes", { count: more.length })}
+          fewerLabel={t("fewerArchetypes")}
+          defaultOpen={more.some((link) => link.isActive)}
+        >
+          {renderLinks(more)}
+        </HomeArchetypeMore>
+      )}
     </nav>
   );
 }

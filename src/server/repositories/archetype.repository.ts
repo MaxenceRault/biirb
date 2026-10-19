@@ -25,9 +25,14 @@ const COLUMNS = "id, slug, label, description, is_active";
 const EDITABLE_COLUMNS = ["label", "description", "is_active"] as const;
 const UNIQUE_VIOLATION = "23505";
 
+// Les plus utilisés d'abord (récits visibles), puis par ordre alphabétique.
 export async function findActiveArchetypes(): Promise<ArchetypeRow[]> {
   const db = await getDb();
-  const { rows } = await db.query<ArchetypeRow>(`select ${COLUMNS} from archetype where is_active order by id`);
+  const { rows } = await db.query<ArchetypeRow>(
+    `select ${COLUMNS} from archetype
+     where is_active
+     order by (select count(*) from post p where p.archetype_id = archetype.id and not p.is_hidden) desc, lower(label)`,
+  );
   return rows;
 }
 

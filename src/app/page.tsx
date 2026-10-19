@@ -43,7 +43,8 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         </Suspense>
         {/* Colonnes latérales sur grand écran : à droite dès lg, à gauche dès xl (types de récit + raccourcis). */}
         <div className="mx-auto max-w-190 px-4 md:px-6 lg:grid lg:max-w-300 lg:grid-cols-[minmax(0,1fr)_--spacing(72)] lg:items-start lg:gap-8 xl:grid-cols-[--spacing(52)_minmax(0,1fr)_--spacing(72)]">
-          <aside className="sticky top-24 hidden flex-col gap-3 xl:flex">
+          {/* Collante mais jamais plus haute que l'écran : la liste des types défile à l'intérieur. */}
+          <aside className="sticky top-24 hidden max-h-[calc(100dvh-7rem)] flex-col gap-3 overflow-y-auto overscroll-contain p-1 -m-1 xl:flex">
             <Suspense fallback={<SidebarSkeleton />}>
               <LeftSidebar searchParams={searchParams} />
             </Suspense>

@@ -107,6 +107,7 @@ src/
 │   ├── HomeSidebar.tsx        # Colonnes latérales de l'accueil (grand écran) : types de récit, destinations tendance, invitation au planificateur
 │   ├── FeedFilterLink.tsx     # Lien de filtre du feed (type de récit, client) : ne remonte pas en haut de la page, revient au début du feed s'il est hors écran
 │   ├── BackToTop.tsx          # Bouton « Revenir en haut » de l'accueil (desktop, client : apparaît après défilement)
+│   ├── HomeArchetypeMore.tsx  # Types de récit repliés de la colonne de l'accueil (client) : liste puis bouton « autres types / moins de types » en dessous
 │   ├── HomeShortcuts.tsx      # Raccourcis de la colonne de gauche : nouveau récit, planifier (client, connectés uniquement)
 │   ├── NavbarLinks.tsx        # Liens principaux (page active), en ligne ou dans le menu mobile
 │   ├── NavbarMobileMenu.tsx   # Menu burger (< md) : recherche + liens

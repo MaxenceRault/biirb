@@ -26,6 +26,8 @@
     "title": "Les derniers voyages de la communauté",
     "archetypesLabel": "Filtrer par type de récit",
     "allArchetypes": "Tendances",
+    "moreArchetypes": "{count, plural, one {# autre type} other {# autres types}}",
+    "fewerArchetypes": "Moins de types",
     "empty": "Aucun post pour le moment.",
     "error": "Impossible de charger les posts. Réessayez plus tard.",
     "newPost": "Nouveau post",
