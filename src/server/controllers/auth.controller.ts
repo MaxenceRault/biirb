@@ -1,12 +1,13 @@
 import "server-only";
 import { getConfig } from "@/server/config";
+import { signDeviceToken, verifyDeviceToken } from "@/server/jwt";
 import { clientIp, isRateLimited } from "@/server/rateLimit";
 import { AuthError, login, logout, refreshSession, register, type AuthResult } from "@/server/services/auth.service";
 import { PasswordResetError, requestPasswordReset, resetPassword } from "@/server/services/password-reset.service";
 import {
+  authCookieSchema,
   forgotPasswordSchema,
   loginSchema,
-  refreshTokenSchema,
   registerSchema,
   resetPasswordSchema,
 } from "@/schemas/auth.schema";
@@ -16,12 +17,17 @@ const MAX_BODY_BYTES = 4 * 1024;
 // Refresh token : cookie illisible par le JavaScript (une faille XSS ne vole plus la session), envoyé seulement aux routes d'auth.
 const REFRESH_COOKIE = "brb_refresh";
 const REFRESH_COOKIE_PATH = "/api/v1/auth";
+// Appareil connu : envoyé seulement au login, pour que la limite par email ne bloque pas le titulaire (voir loginController).
+const DEVICE_COOKIE = "brb_device";
+const DEVICE_COOKIE_PATH = "/api/v1/auth/login";
 
 export async function loginController(request: Request) {
   const { max, windowMs } = getConfig().rateLimits.login;
   if (isRateLimited(`login:${clientIp(request)}`, max, windowMs)) {
     return errorResponse(429, "TOO_MANY_REQUESTS");
   }
+  // Un formulaire d'un autre site remplacerait les cookies (session, appareil connu) par ceux d'un autre compte.
+  if (!isSameOrigin(request)) return errorResponse(403, "FORBIDDEN");
 
   const sizeError = checkBodySize(request);
   if (sizeError) return sizeError;
@@ -29,14 +35,21 @@ export async function loginController(request: Request) {
   const body = loginSchema.safeParse(await readJson(request));
   if (!body.success) return errorResponse(400, "INVALID_INPUT");
 
-  // Même réponse que la limite par IP : ne révèle pas si le compte existe.
+  // Même réponse que la limite par IP (ne révèle pas le compte) ; un appareil connu a son compteur, qu'un tiers ne peut pas remplir.
+  const deviceCookie = readCookie(request, DEVICE_COOKIE);
+  const deviceId = deviceCookie ? await verifyDeviceToken(deviceCookie, body.data.email) : null;
   const emailLimit = getConfig().rateLimits.loginEmail;
-  if (isRateLimited(`login:email:${body.data.email}`, emailLimit.max, emailLimit.windowMs)) {
+  const emailKey = deviceId ? `login:device:${deviceId}` : `login:email:${body.data.email}`;
+  if (isRateLimited(emailKey, emailLimit.max, emailLimit.windowMs)) {
     return errorResponse(429, "TOO_MANY_REQUESTS");
   }
 
   try {
-    return sessionResponse(await login(body.data.email, body.data.password, body.data.remember));
+    const response = sessionResponse(await login(body.data.email, body.data.password, body.data.remember));
+    const ttl = getConfig().loginDeviceTtlSeconds;
+    const deviceToken = await signDeviceToken(body.data.email, ttl);
+    response.headers.append("Set-Cookie", authCookie(DEVICE_COOKIE, deviceToken, DEVICE_COOKIE_PATH, ttl));
+    return response;
   } catch (error) {
     return handleError(error);
   }
@@ -130,7 +143,7 @@ export async function refreshController(request: Request) {
   }
   if (!isSameOrigin(request)) return errorResponse(403, "FORBIDDEN");
 
-  const refreshToken = readRefreshCookie(request);
+  const refreshToken = readCookie(request, REFRESH_COOKIE);
   if (!refreshToken) return withClearedCookie(errorResponse(401, "INVALID_REFRESH_TOKEN"));
 
   try {
@@ -145,7 +158,7 @@ export async function refreshController(request: Request) {
 export async function logoutController(request: Request) {
   if (!isSameOrigin(request)) return errorResponse(403, "FORBIDDEN");
 
-  const refreshToken = readRefreshCookie(request);
+  const refreshToken = readCookie(request, REFRESH_COOKIE);
   try {
     if (refreshToken) await logout(refreshToken);
     return withClearedCookie(new Response(null, { status: 204 }));
@@ -164,20 +177,24 @@ function isSameOrigin(request: Request) {
   }
 }
 
-function readRefreshCookie(request: Request): string | null {
+function readCookie(request: Request, name: string): string | null {
   const cookie = (request.headers.get("cookie") ?? "")
     .split(";")
     .map((part) => part.trim())
-    .find((part) => part.startsWith(`${REFRESH_COOKIE}=`));
-  const value = refreshTokenSchema.safeParse(cookie?.slice(REFRESH_COOKIE.length + 1));
+    .find((part) => part.startsWith(`${name}=`));
+  const value = authCookieSchema.safeParse(cookie?.slice(name.length + 1));
   return value.success ? value.data : null;
 }
 
 // maxAgeSeconds null : cookie de session, oublié à la fermeture du navigateur (l'expiration en base reste la borne).
 function refreshCookie(value: string, maxAgeSeconds: number | null) {
+  return authCookie(REFRESH_COOKIE, value, REFRESH_COOKIE_PATH, maxAgeSeconds);
+}
+
+function authCookie(name: string, value: string, path: string, maxAgeSeconds: number | null) {
   return [
-    `${REFRESH_COOKIE}=${value}`,
-    `Path=${REFRESH_COOKIE_PATH}`,
+    `${name}=${value}`,
+    `Path=${path}`,
     ...(maxAgeSeconds === null ? [] : [`Max-Age=${maxAgeSeconds}`]),
     "HttpOnly",
     "SameSite=Strict",

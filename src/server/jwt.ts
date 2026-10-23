@@ -1,5 +1,5 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { getConfig } from "@/server/config";
 
@@ -47,6 +47,30 @@ export async function verifyRefreshToken(token: string): Promise<{ userId: strin
   } catch {
     return null;
   }
+}
+
+// Appareil où ce compte s'est déjà connecté : lié à l'email (empreinte, pas l'adresse en clair dans le cookie).
+export function signDeviceToken(email: string, ttlSeconds: number) {
+  return new SignJWT({ token_use: "device", email_hash: hashEmail(email) })
+    .setProtectedHeader({ alg: "HS256" })
+    .setJti(randomUUID())
+    .setIssuedAt()
+    .setExpirationTime(`${ttlSeconds}s`)
+    .sign(getRefreshSecret());
+}
+
+// Identifiant du cookie s'il a été émis pour cet email, sinon null.
+export async function verifyDeviceToken(token: string, email: string): Promise<string | null> {
+  try {
+    const { payload } = await jwtVerify(token, getRefreshSecret(), { algorithms: ["HS256"] });
+    return payload.token_use === "device" && payload.email_hash === hashEmail(email) ? (payload.jti ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+function hashEmail(email: string) {
+  return createHash("sha256").update(email).digest("base64url");
 }
 
 export async function getUserIdFromRequest(request: Request): Promise<string | null> {
