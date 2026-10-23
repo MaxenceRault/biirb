@@ -52,10 +52,19 @@ function clearOfflineCache() {
   void caches.delete("brb-pages");
 }
 
-// Révocation côté serveur en best effort ; le serveur efface aussi le cookie.
-export async function logout() {
+// Session gardée (false) tant que le serveur n'a pas révoqué le refresh token : pas de fausse déconnexion hors ligne.
+export async function logout(): Promise<boolean> {
+  // Même verrou que le refresh (si le navigateur le gère) : un refresh en cours ne peut pas finir après la déconnexion.
+  return navigator.locks
+    ? navigator.locks.request("brb-refresh", revokeSession)
+    : revokeSession();
+}
+
+async function revokeSession() {
+  const response = await fetch("/api/v1/auth/logout", { method: "POST" }).catch(() => null);
+  if (!response?.ok) return false;
   clearSession();
-  await fetch("/api/v1/auth/logout", { method: "POST" }).catch(() => null);
+  return true;
 }
 
 let pendingRefresh: Promise<string | null> | null = null;

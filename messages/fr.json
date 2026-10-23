@@ -16,6 +16,7 @@
     "accountMenu": "Menu du compte",
     "settings": "Paramètres",
     "logout": "Se déconnecter",
+    "logoutFailed": "Déconnexion impossible : vérifiez votre connexion puis réessayez.",
     "search": "Rechercher",
     "admin": "Administration",
     "openMenu": "Ouvrir le menu",
