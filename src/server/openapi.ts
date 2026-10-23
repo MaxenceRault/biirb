@@ -138,7 +138,8 @@ const authResult = {
 const REFRESH_COOKIE_DOC =
   "Le refresh token n'est jamais dans le corps : il est posé dans le cookie `brb_refresh` (HttpOnly, SameSite=Strict, " +
   "Secure en production, Path=/api/v1/auth), illisible par le JavaScript. JWT signé avec JWT_REFRESH_SECRET, à usage unique " +
-  "(REFRESH_TOKEN_REMEMBER_DAYS avec remember, 30 jours par défaut ; REFRESH_TOKEN_SESSION_HOURS sinon, 24 h par défaut).";
+  "(REFRESH_TOKEN_REMEMBER_DAYS avec remember, 30 jours par défaut ; REFRESH_TOKEN_SESSION_HOURS sinon, 24 h par défaut). " +
+  "Sans remember (et à l'inscription), cookie de session sans Max-Age, effacé à la fermeture du navigateur.";
 
 function error(description: string, codes: string[]) {
   return {
@@ -407,12 +408,15 @@ export function buildOpenApiDocument() {
           summary: "Se connecter",
           description:
             "`remember` fixe la durée du refresh token (30 jours, sinon 24 h) et le stockage côté navigateur. " +
-            "L'access token dure toujours 1 h.",
+            "L'access token dure toujours 1 h. Connexion réussie : cookie `brb_device` (HttpOnly, SameSite=Strict, " +
+            "Path=/api/v1/auth/login, LOGIN_DEVICE_DAYS) ; avec lui, cet appareil a son propre compteur au lieu de la limite par email. " +
+            "En-tête Origin obligatoire et identique au site (CSRF).",
           requestBody: requestBody(loginSchema),
           responses: {
             200: json("Connecté (refresh token dans le cookie brb_refresh)", authResult),
             400: invalidInput,
             401: error("Email ou mot de passe incorrect (message volontairement identique)", ["INVALID_CREDENTIALS"]),
+            403: error("Compte banni (après un mot de passe correct), ou origine absente ou différente du site", ["ACCOUNT_BANNED", "FORBIDDEN"]),
             429: tooManyRequests,
             500: internalError,
           },

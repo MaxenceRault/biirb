@@ -31,8 +31,8 @@ export class AuthError extends Error {
   }
 }
 
-// refreshExpiresAt : fin de vie de la session, reprise par la durée du cookie.
-export type AuthResult = { token: string; refreshToken: string; refreshExpiresAt: Date; user: PublicUser };
+// refreshExpiresAt : fin de vie de la session ; durée du cookie seulement si remember (sinon cookie de session).
+export type AuthResult = { token: string; refreshToken: string; refreshExpiresAt: Date; remember: boolean; user: PublicUser };
 
 export async function login(email: string, password: string, remember: boolean): Promise<AuthResult> {
   const user = await findUserByEmail(email);
@@ -63,11 +63,11 @@ export async function register(name: string, email: string, password: string): P
 
 // Rotation : l'ancien token devient inutilisable.
 export async function refreshSession(refreshToken: string): Promise<AuthResult> {
-  const userId = await verifyRefreshToken(refreshToken);
-  if (!userId) throw new AuthError("INVALID_REFRESH_TOKEN");
+  const session = await verifyRefreshToken(refreshToken);
+  if (!session) throw new AuthError("INVALID_REFRESH_TOKEN");
 
   const stored = await findRefreshTokenByHash(hashToken(refreshToken));
-  if (!stored || stored.user_id !== userId || new Date(stored.expires_at) <= new Date()) {
+  if (!stored || stored.user_id !== session.userId || new Date(stored.expires_at) <= new Date()) {
     throw new AuthError("INVALID_REFRESH_TOKEN");
   }
 
@@ -85,11 +85,12 @@ export async function refreshSession(refreshToken: string): Promise<AuthResult> 
 
   const { id, username, display_name, avatar_url, avatar_seed, avatar_background_color, role, badge } = profile;
   const expiresAt = new Date(stored.expires_at);
-  const next = await issueRefreshToken(id, stored.family_id, expiresAt);
+  const next = await issueRefreshToken(id, stored.family_id, expiresAt, session.remember);
   return {
     token: await signToken(id),
     refreshToken: next,
     refreshExpiresAt: expiresAt,
+    remember: session.remember,
     user: { id, username, display_name, avatar_url, avatar_seed, avatar_background_color, role, badge },
   };
 }
@@ -104,14 +105,14 @@ async function createSession(user: PublicUser, remember: boolean): Promise<AuthR
   const expiresAt = new Date(Date.now() + (remember ? rememberMs : sessionMs));
   const [token, refreshToken] = await Promise.all([
     signToken(user.id),
-    issueRefreshToken(user.id, randomUUID(), expiresAt),
+    issueRefreshToken(user.id, randomUUID(), expiresAt, remember),
   ]);
-  return { token, refreshToken, refreshExpiresAt: expiresAt, user };
+  return { token, refreshToken, refreshExpiresAt: expiresAt, remember, user };
 }
 
 // Seule l'empreinte SHA-256 est stockée en base.
-async function issueRefreshToken(userId: string, familyId: string, expiresAt: Date) {
-  const token = await signRefreshToken(userId, expiresAt);
+async function issueRefreshToken(userId: string, familyId: string, expiresAt: Date, remember: boolean) {
+  const token = await signRefreshToken(userId, expiresAt, remember);
   await insertRefreshToken({ user_id: userId, family_id: familyId, token_hash: hashToken(token), expires_at: expiresAt });
   return token;
 }

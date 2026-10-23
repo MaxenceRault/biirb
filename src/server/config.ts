@@ -21,6 +21,7 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: duration.default("1h"),
   REFRESH_TOKEN_REMEMBER_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   REFRESH_TOKEN_SESSION_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+  LOGIN_DEVICE_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   // ≥ 10 (règle du projet) ; au-delà de 14, chaque connexion devient très lente.
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(14).default(12),
 
@@ -102,6 +103,7 @@ export type ServerConfig = {
   jwtRefreshSecret: string;
   jwtExpiresIn: string;
   refreshTokenTtlMs: { remember: number; session: number };
+  loginDeviceTtlSeconds: number;
   bcryptSaltRounds: number;
   passwordResetTtlMs: number;
   trustedProxyHops: number;
@@ -140,6 +142,7 @@ export function getConfig(): ServerConfig {
       remember: env.REFRESH_TOKEN_REMEMBER_DAYS * 24 * 60 * 60 * 1000,
       session: env.REFRESH_TOKEN_SESSION_HOURS * 60 * 60 * 1000,
     },
+    loginDeviceTtlSeconds: env.LOGIN_DEVICE_DAYS * 24 * 60 * 60,
     bcryptSaltRounds: env.BCRYPT_SALT_ROUNDS,
     passwordResetTtlMs: env.PASSWORD_RESET_TTL_MINUTES * 60 * 1000,
     trustedProxyHops: env.TRUSTED_PROXY_HOPS,

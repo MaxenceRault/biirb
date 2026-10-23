@@ -31,8 +31,8 @@ export const resetPasswordSchema = z.strictObject({
   password: newPassword,
 });
 
-// Valeur du cookie httpOnly du refresh token (JWT).
-export const refreshTokenSchema = z
+// Valeur d'un cookie httpOnly d'authentification (JWT) : brb_refresh, brb_device.
+export const authCookieSchema = z
   .string()
   .max(1000)
   .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);

@@ -5,7 +5,8 @@ type CsvLabels = { headers: string[]; category: (category: string) => string; da
 
 // Une ligne par activité. « ; » et BOM UTF-8 : ouverture directe dans Excel en français, accents compris.
 export function buildTripCsv({ trip, items }: Pick<TripDetail, "trip" | "items">, days: string[], labels: CsvLabels) {
-  const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
+  // Injection CSV (OWASP) : une cellule commençant par = + - @, tabulation ou retour chariot serait évaluée comme formule par le tableur.
+  const cell = (value: string) => `"${value.replace(/^[=+@\t\r-]/, "'$&").replaceAll('"', '""')}"`;
   const rows = items.map((item) =>
     [
       labels.dayLabel(days.indexOf(item.day) + 1),
