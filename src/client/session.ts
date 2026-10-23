@@ -26,8 +26,9 @@ if (typeof window !== "undefined") {
 
 // Profil en sessionStorage sans « Se souvenir de moi » : oublié à la fermeture de l'onglet.
 export function saveSession(token: string, user: SessionUser, remember: boolean) {
-  // Un refresh garde le cache hors ligne ; un autre compte part d'un cache vide.
-  if (parseSessionUser(getStoredUser())?.id !== user.id) clearOfflineCache();
+  allowOfflineCache(remember);
+  // Un refresh garde le cache hors ligne ; un autre compte, ou une session sans « Se souvenir de moi », part d'un cache vide.
+  if (!remember || parseSessionUser(getStoredUser())?.id !== user.id) clearOfflineCache();
   for (const storage of [localStorage, sessionStorage]) storage.removeItem(USER_KEY);
   accessToken = token;
   (remember ? localStorage : sessionStorage).setItem(USER_KEY, JSON.stringify(user));
@@ -41,6 +42,7 @@ function getStoredUser() {
 export function clearSession() {
   accessToken = null;
   for (const storage of [localStorage, sessionStorage]) storage.removeItem(USER_KEY);
+  allowOfflineCache(false);
   clearOfflineCache();
   window.dispatchEvent(new Event(SESSION_EVENT));
 }
@@ -50,6 +52,12 @@ function clearOfflineCache() {
   if (!("caches" in window)) return;
   void caches.delete("brb-data");
   void caches.delete("brb-pages");
+}
+
+// Repère lu par public/sw.js : sans lui, pages et données ne sont ni gardées ni servies hors ligne.
+function allowOfflineCache(allowed: boolean) {
+  if (!("caches" in window)) return;
+  void (allowed ? caches.open("brb-remembered") : caches.delete("brb-remembered"));
 }
 
 // Session gardée (false) tant que le serveur n'a pas révoqué le refresh token : pas de fausse déconnexion hors ligne.
