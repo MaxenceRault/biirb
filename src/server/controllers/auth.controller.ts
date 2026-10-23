@@ -94,11 +94,12 @@ export async function forgotPasswordController(request: Request) {
   return new Response(null, { status: 202 });
 }
 
-// Dev : adresse tapée dans le navigateur (en-tête Host), pas celle d'écoute du serveur (0.0.0.0 dans Docker).
+// Dev : adresse et port d'écoute du serveur (request.url), jamais l'en-tête Host que tout client du réseau choisit.
+// 0.0.0.0 / [::] (Docker) ne s'ouvrent pas dans un navigateur : remplacés par localhost.
 function devRequestOrigin(request: Request) {
   const url = new URL(request.url);
-  const host = request.headers.get("host");
-  return host && /^[a-z0-9.-]+(:\d+)?$/i.test(host) ? `${url.protocol}//${host}` : url.origin;
+  if (url.hostname === "0.0.0.0" || url.hostname === "[::]") url.hostname = "localhost";
+  return url.origin;
 }
 
 // POST /api/v1/auth/reset-password { token, password } → 204 ; toutes les sessions du compte sont révoquées.
