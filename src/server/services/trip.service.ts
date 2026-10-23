@@ -839,9 +839,9 @@ function tripMonths(startDate: string, endDate: string) {
 function postSources(posts: PostForTrip[], excerpt?: number) {
   return posts.map((post) => ({
     id: post.id,
-    titre: post.title,
-    resume: post.short_description,
-    recit: excerpt ? post.long_description.slice(0, excerpt) : post.long_description,
+    titre: withoutTags(post.title),
+    resume: withoutTags(post.short_description),
+    recit: withoutTags(excerpt ? post.long_description.slice(0, excerpt) : post.long_description),
     destination: placeLabel({
       country: post.destination_country_code,
       state: post.destination_state_code,
@@ -849,6 +849,11 @@ function postSources(posts: PostForTrip[], excerpt?: number) {
     }),
     tags: post.tags.map((tag) => placeLabel({ country: tag.country_code, state: tag.state_code, city: tag.city })),
   }));
+}
+
+// JSON.stringify n'échappe pas < et > : un « </posts> » écrit dans un récit fermerait le bloc de données du prompt.
+function withoutTags(text: string) {
+  return text.replaceAll("<", "＜").replaceAll(">", "＞");
 }
 
 type ChatRequest = Omit<PlanRequest, "posts"> & {
