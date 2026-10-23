@@ -33,10 +33,11 @@ export async function requestPasswordReset(email: string, devOrigin: string | nu
   const link = `${baseUrl}/login?view=reset#token=${token}`;
   const t = await getTranslations({ locale: "fr", namespace: "PasswordResetEmail" });
   try {
+    // Pas de nom affiché (texte libre, adresse non vérifiée à l'inscription) : un tiers y glisserait un faux lien.
     await sendTextMail(mail, {
       to: email,
       subject: t("subject"),
-      text: t("body", { name: user.display_name, link, minutes: getConfig().passwordResetTtlMs / 60_000 }),
+      text: t("body", { link, minutes: getConfig().passwordResetTtlMs / 60_000 }),
     });
     logInfo("password-reset", { sent: true });
   } catch (error) {
