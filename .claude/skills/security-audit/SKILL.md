@@ -1,6 +1,6 @@
 ---
 name: security-audit
-description: Audit de sécurité du projet Biirb (security-auditor). Analyse le code source, cartographie les vulnérabilités selon l'OWASP Top 10 (2021) et les CWE, vérifie les 10 règles de sécurité de CLAUDE.md, scanne les dépendances (npm audit, pip-audit s'il y a du Python), puis génère un rapport avec un score sur 10 et des correctifs proposés. À utiliser quand on demande un audit de sécurité, une revue de sécurité, un score de sécurité ou une préparation à la soutenance côté sécurité.
+description: Audit de sécurité du projet Biirb (security-auditor). Analyse le code source, cartographie les vulnérabilités selon l'OWASP Top 10 (2021) et les CWE, vérifie les 10 règles de sécurité de CLAUDE.md, scanne les dépendances (npm audit, pip-audit s'il y a du Python), puis génère un rapport avec un score sur 10 et des correctifs proposés. À utiliser quand on demande un audit de sécurité, une revue de sécurité ou un score de sécurité.
 ---
 
 # Audit de sécurité (security-auditor)
