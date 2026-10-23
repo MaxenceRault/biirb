@@ -16,6 +16,7 @@
     "accountMenu": "Menu du compte",
     "settings": "Paramètres",
     "logout": "Se déconnecter",
+    "logoutFailed": "Déconnexion impossible : vérifiez votre connexion puis réessayez.",
     "search": "Rechercher",
     "admin": "Administration",
     "openMenu": "Ouvrir le menu",
@@ -1403,7 +1404,7 @@
   },
   "PasswordResetEmail": {
     "subject": "Biirb : réinitialiser votre mot de passe",
-    "body": "Bonjour {name},\n\nVous avez demandé à changer le mot de passe de votre compte Biirb. Ouvrez ce lien pour en choisir un nouveau (valable {minutes} minutes, une seule fois) :\n\n{link}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez cet email : votre mot de passe ne change pas.\n\nL'équipe Biirb"
+    "body": "Bonjour,\n\nVous avez demandé à changer le mot de passe de votre compte Biirb. Ouvrez ce lien pour en choisir un nouveau (valable {minutes} minutes, une seule fois) :\n\n{link}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez cet email : votre mot de passe ne change pas.\n\nL'équipe Biirb"
   },
   "TripPassRequestEmail": {
     "subject": "Biirb : demande de pass voyage à traiter (ticket #{id})",

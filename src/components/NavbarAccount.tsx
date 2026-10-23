@@ -6,6 +6,7 @@ import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 import { Avatar } from "@/components/ui/Avatar";
 import { buttonClassName } from "@/components/ui/Button";
+import { FormError } from "@/components/ui/FormError";
 import { Icon } from "@/components/ui/Icon";
 import { useDismiss } from "@/client/hooks/useDismiss";
 import {
@@ -46,11 +47,16 @@ function AccountMenu({ user }: { user: SessionUser }) {
   const [openedOn, setOpenedOn] = useState<string | null>(null);
   const open = openedOn === pathname;
   const close = useCallback(() => setOpenedOn(null), []);
+  const [logoutFailed, setLogoutFailed] = useState(false);
   useDismiss(root, open, close);
 
-  function handleLogout() {
+  async function handleLogout() {
+    setLogoutFailed(false);
+    if (!(await logout())) {
+      setLogoutFailed(true);
+      return;
+    }
     close();
-    void logout();
     router.push("/");
   }
 
@@ -102,6 +108,11 @@ function AccountMenu({ user }: { user: SessionUser }) {
               <Icon name="logout" className="size-4" />
               {t("logout")}
             </button>
+            {logoutFailed && (
+              <div className="px-3 py-1.5">
+                <FormError>{t("logoutFailed")}</FormError>
+              </div>
+            )}
           </div>
         </div>
       </div>
