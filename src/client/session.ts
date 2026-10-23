@@ -169,9 +169,11 @@ export function updateSessionUser(user: SessionUser) {
 }
 
 // ?next= après connexion ou inscription : chemin interne uniquement (jamais « //autre-site.com »).
+// Caractères de contrôle refusés : le parseur d'URL retire tabulations et retours à la ligne (« /\t/site.com » → « //site.com »).
 export function nextPathAfterLogin(fallback = "/") {
   const next = new URLSearchParams(window.location.search).get("next");
-  return next && /^\/(?![/\\])/.test(next) ? next : fallback;
+  if (!next || !/^\/(?![/\\])/.test(next) || /\p{Cc}/u.test(next)) return fallback;
+  return new URL(next, window.location.origin).origin === window.location.origin ? next : fallback;
 }
 
 export type ApiResult<T> = { data: T } | { error: string };
