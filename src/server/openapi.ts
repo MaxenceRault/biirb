@@ -138,7 +138,8 @@ const authResult = {
 const REFRESH_COOKIE_DOC =
   "Le refresh token n'est jamais dans le corps : il est posé dans le cookie `brb_refresh` (HttpOnly, SameSite=Strict, " +
   "Secure en production, Path=/api/v1/auth), illisible par le JavaScript. JWT signé avec JWT_REFRESH_SECRET, à usage unique " +
-  "(REFRESH_TOKEN_REMEMBER_DAYS avec remember, 30 jours par défaut ; REFRESH_TOKEN_SESSION_HOURS sinon, 24 h par défaut).";
+  "(REFRESH_TOKEN_REMEMBER_DAYS avec remember, 30 jours par défaut ; REFRESH_TOKEN_SESSION_HOURS sinon, 24 h par défaut). " +
+  "Sans remember (et à l'inscription), cookie de session sans Max-Age, effacé à la fermeture du navigateur.";
 
 function error(description: string, codes: string[]) {
   return {

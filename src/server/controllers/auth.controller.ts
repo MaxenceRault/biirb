@@ -173,11 +173,12 @@ function readRefreshCookie(request: Request): string | null {
   return value.success ? value.data : null;
 }
 
-function refreshCookie(value: string, maxAgeSeconds: number) {
+// maxAgeSeconds null : cookie de session, oublié à la fermeture du navigateur (l'expiration en base reste la borne).
+function refreshCookie(value: string, maxAgeSeconds: number | null) {
   return [
     `${REFRESH_COOKIE}=${value}`,
     `Path=${REFRESH_COOKIE_PATH}`,
-    `Max-Age=${maxAgeSeconds}`,
+    ...(maxAgeSeconds === null ? [] : [`Max-Age=${maxAgeSeconds}`]),
     "HttpOnly",
     "SameSite=Strict",
     // http://localhost en dev : Secure empêcherait certains navigateurs d'enregistrer le cookie.
@@ -203,8 +204,8 @@ function readJson(request: Request) {
 }
 
 // Access token dans le corps (gardé en mémoire par le navigateur), refresh token en cookie. Jamais mis en cache.
-function sessionResponse({ token, refreshToken, refreshExpiresAt, user }: AuthResult, status = 200) {
-  const maxAge = Math.max(0, Math.floor((refreshExpiresAt.getTime() - Date.now()) / 1000));
+function sessionResponse({ token, refreshToken, refreshExpiresAt, remember, user }: AuthResult, status = 200) {
+  const maxAge = remember ? Math.max(0, Math.floor((refreshExpiresAt.getTime() - Date.now()) / 1000)) : null;
   return Response.json(
     { token, user },
     { status, headers: { "Cache-Control": "no-store", "Set-Cookie": refreshCookie(refreshToken, maxAge) } },
