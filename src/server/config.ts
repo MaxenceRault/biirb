@@ -74,7 +74,7 @@ const envSchema = z.object({
   // Quota IA par utilisateur et par jour (heure de Paris), admins exclus ; compteur en base (ai_usage).
   AI_DAILY_LIMIT_PER_USER: count.default(15),
   // Appels IA sur un voyage qui a le pass voyage (même compteur journalier, plafond plus haut).
-  AI_DAILY_LIMIT_TRIP_PASS: count.default(50),
+  AI_DAILY_LIMIT_TRIP_PASS: count.default(100),
   // IA du planificateur, par utilisateur : génération d'un côté, discussion de l'autre.
   RATE_LIMIT_TRIP_AI_MAX: count.default(20),
   RATE_LIMIT_TRIP_AI_WINDOW_SECONDS: seconds.default(60 * 60),

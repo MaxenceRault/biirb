@@ -12,7 +12,9 @@ import { Icon } from "@/components/ui/Icon";
 import { TripCard, type TripSummary } from "@/components/TripCard";
 import { TripContextBar } from "@/components/TripContextBar";
 import type { Archetype } from "@/lib/posts";
-import { TRIP_MAX_DAYS } from "@/schemas/trip.schema";
+import { Textarea } from "@/components/ui/Textarea";
+import { TRIP_INSTRUCTIONS_MAX, TRIP_MAX_DAYS, TRIP_MAX_DESTINATIONS } from "@/schemas/trip.schema";
+import { TRIP_MAX_TRAVELERS } from "@/schemas/trip-share.schema";
 import { apiFetch, getSessionSnapshot } from "@/client/session";
 import { plannerError, type PlannerError } from "@/components/TripPlanner";
 
@@ -53,11 +55,16 @@ export function PlannerHome({ archetypes }: { archetypes: readonly Archetype[] }
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const body = Object.fromEntries(
-      ["destinationCountry", "destinationState", "destinationCity", "startDate", "endDate", "archetype"]
-        .map((key) => [key, form.get(key)])
-        .filter(([, value]) => typeof value === "string" && value !== ""),
-    );
+    const body = {
+      ...Object.fromEntries(
+        ["startDate", "endDate", "archetype", "instructions"]
+          .map((key) => [key, String(form.get(key) ?? "").trim()])
+          .filter(([, value]) => value !== ""),
+      ),
+      // Champs cachés du TripContextBar.
+      destinations: form.getAll("destination").map((value) => JSON.parse(String(value)) as unknown),
+      travelers: Number(form.get("travelers")),
+    };
 
     setPending(true);
     setError(null);
@@ -81,7 +88,15 @@ export function PlannerHome({ archetypes }: { archetypes: readonly Archetype[] }
           {t("create.title")}
         </h2>
         <form method="post" onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <TripContextBar idPrefix="trip" archetypes={archetypes} maxDays={TRIP_MAX_DAYS} disablePast />
+          <TripContextBar
+            idPrefix="trip"
+            archetypes={archetypes}
+            maxDays={TRIP_MAX_DAYS}
+            maxDestinations={TRIP_MAX_DESTINATIONS}
+            maxTravelers={TRIP_MAX_TRAVELERS}
+            disablePast
+          />
+          <TripWishes />
           <div className="flex flex-col items-end gap-2">
             <FormError>{error && t(`errors.${error}`)}</FormError>
             {list.status === "ready" && list.aiQuota.limit !== null && (
@@ -106,6 +121,36 @@ export function PlannerHome({ archetypes }: { archetypes: readonly Archetype[] }
         </h2>
         <TripList state={list} />
       </section>
+    </div>
+  );
+}
+
+// Envies libres pour Biirbou (itinéraire, jours déjà prévus…) : cadrées et filtrées par le serveur.
+function TripWishes() {
+  const t = useTranslations("Planner");
+  const [length, setLength] = useState(0);
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-baseline justify-between gap-2">
+        <label htmlFor="trip-instructions" className="font-display text-label-md text-ink">
+          {t("create.wishesLabel")}
+        </label>
+        <span className="text-label-sm text-ink-soft">
+          {t("create.wishesCount", { count: length, max: TRIP_INSTRUCTIONS_MAX })}
+        </span>
+      </div>
+      <Textarea
+        id="trip-instructions"
+        name="instructions"
+        maxLength={TRIP_INSTRUCTIONS_MAX}
+        placeholder={t("create.wishesPlaceholder")}
+        onChange={(event) => setLength(event.currentTarget.value.length)}
+        aria-describedby="trip-instructions-hint"
+        className="min-h-24"
+      />
+      <p id="trip-instructions-hint" className="text-label-sm text-ink-soft">
+        {t("create.wishesHint")}
+      </p>
     </div>
   );
 }
