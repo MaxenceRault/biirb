@@ -220,7 +220,7 @@ DATABASE     Cloud SQL (Postgres)
 
 La sécurité prime sur la rapidité de livraison. En cas de doute, demander plutôt que supposer. Signaler explicitement toute faille ou tout compromis rencontré, même hors du périmètre de la tâche.
 
-### Must-have bootcamp (obligatoires avant la soutenance)
+### Must-have bootcamp (obligatoires)
 
 Seuls les must-have sont exigés : ne pas implémenter les nice-to-have (OAuth/OIDC, MFA, RBAC granulaire, API Gateway/WAF, chiffrement au repos, Dependabot/Snyk, centralisation des logs, etc.) sauf demande explicite.
 
@@ -233,7 +233,7 @@ Seuls les must-have sont exigés : ne pas implémenter les nice-to-have (OAuth/O
 7. **CSRF** — Le JWT est envoyé via l'en-tête `Authorization`, jamais via un cookie : les routes de l'API ne lisent aucun cookie. Seules exceptions, validées : le cookie `brb_refresh`, lu uniquement par `/auth/refresh` et `/auth/logout`, protégé par SameSite=Strict **et** une vérification de l'en-tête `Origin` (403 si absent ou différent du site) ; le cookie `brb_device` (HttpOnly, SameSite=Strict, Path=/api/v1/auth/login), lu uniquement par `/auth/login` (même contrôle de `Origin`) pour choisir son compteur de rate limit, jamais pour authentifier. Ne pas introduire d'autre cookie sans en discuter.
 8. **Base de données** — Requêtes paramétrées obligatoires (ORM type Prisma ou driver préparé), jamais de SQL concaténé avec des entrées utilisateur. Utilisateur DB avec droits restreints.
 9. **Durcissement serveur** — En-têtes HTTP de sécurité (équivalent Helmet, via `headers()` dans `next.config.ts` : CSP, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, HSTS). Si Docker : conteneur exécuté en utilisateur **non-root**. En place dans `next.config.ts` (`securityHeaders`, `poweredByHeader: false`) : toute nouvelle ressource externe (image, script, API) doit y être ajoutée à la CSP.
-10. **Audit avant soutenance** — Repasser cette checklist point par point et tester l'injection d'erreurs (entrées invalides, token absent/expiré/falsifié, champs inconnus, SQL/XSS) avant la soutenance du vendredi.
+10. **Audit régulier** — Repasser régulièrement cette checklist point par point et tester l'injection d'erreurs (entrées invalides, token absent/expiré/falsifié, champs inconnus, SQL/XSS).
 
 ### Règles complémentaires
 - **Variables sensibles : toujours dans le `.env` (`.env.local`, ignoré par git), jamais en dur dans le code.** Sont sensibles :
