@@ -114,6 +114,8 @@ const CHAT_MAX_OUTPUT_TOKENS = 3_072;
 const CHAT_POST_EXCERPT = 500;
 // Villes du parcours sur la carte (une par séjour).
 const MAX_STOPS = 60;
+// Même limite que trip_item.place_name (db/migrations).
+const PLACE_NAME_MAX = 120;
 // Heure envoyée par l'appareil : ignorée si elle s'écarte trop de l'heure du serveur (horloge fausse ou inventée).
 const CLIENT_TIME_TOLERANCE_MS = 15 * 60 * 1000;
 const PARIS_TIME = new Intl.DateTimeFormat("sv-SE", {
@@ -760,6 +762,9 @@ Règles :
 - Chaque activité a un jour (AAAA-MM-JJ) compris entre les dates du voyage, une heure HH:MM,
   un titre court, une description (longueur indiquée dans « format ») et une catégorie : transport, lodging,
   activity ou food.
+- placeName : nom du lieu précis de l'activité tel qu'il figure sur une carte (nom officiel ou le plus connu, en
+  alphabet latin, ex. « Meiji Jingu », « Sensō-ji », « Musée du Louvre », « Ichiran Shibuya ») ; null s'il n'y a pas
+  de lieu précis (balade libre, repas sans adresse, temps libre, trajet) ou si tu n'es pas sûr qu'il existe.
 - CHAQUE jour du voyage a le nombre d'activités indiqué dans « format » (repas compris), dans l'ordre chronologique,
   rythme adapté au type de récit. Le premier et le dernier jour incluent l'arrivée et le départ.
 - tasks : tâches concrètes de préparation (nombre indiqué dans « format ») (réservations, papiers, matériel), done à false.
@@ -828,6 +833,7 @@ const ITEM_SCHEMA: Schema = {
     description: { type: Type.STRING },
     category: { type: Type.STRING, enum: [...TRIP_ITEM_CATEGORIES] },
     sourcePostId: { type: Type.INTEGER, nullable: true },
+    placeName: { type: Type.STRING, nullable: true },
   },
 };
 
@@ -894,7 +900,22 @@ const aiItemSchema = z.object({
     .transform((value) => value.slice(0, 500) || null),
   category: z.enum(TRIP_ITEM_CATEGORIES),
   sourcePostId: z.number().int().nullable().optional(),
+  // Cherché ensuite chez OpenRouteService : une ligne de texte, sans balise ni caractère de contrôle.
+  placeName: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => cleanPlaceName(value)),
 });
+
+function cleanPlaceName(value: string | null | undefined) {
+  const name = value
+    ?.replace(/[\p{Cc}<>]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, PLACE_NAME_MAX);
+  return name && !leaksInstructions(name) ? name : null;
+}
 
 const aiStopSchema = z.object({
   name: z.string().trim().min(1).transform((value) => value.slice(0, 100)),
@@ -1004,6 +1025,7 @@ async function generatePlan(request: PlanRequest): Promise<{ title: string; plan
       category: item.category,
       // Le modèle peut inventer des ids.
       source_post_id: item.sourcePostId && postIds.has(item.sourcePostId) ? item.sourcePostId : null,
+      place_name: item.placeName,
     }));
 
   return {
@@ -1190,6 +1212,8 @@ Règles :
   Champs : un jour (AAAA-MM-JJ) compris entre les dates du voyage, une heure HH:MM cohérente avec le reste de la
   journée, un titre court, une description d'une ou deux phrases (lieu, conseil pratique) et une catégorie : transport,
   lodging, activity ou food. sourcePostId = id du récit de <posts> dont elle s'inspire, sinon null.
+  placeName : nom du lieu précis tel qu'il figure sur une carte (nom officiel ou le plus connu, en alphabet latin,
+  ex. « Meiji Jingu », « Ichiran Shibuya ») ; null sans lieu précis ou si tu n'es pas sûr qu'il existe.
   N'invente jamais d'id : itemId vient uniquement du <planning>, sourcePostId uniquement de <posts>.
 - memory : <memoire> mise à jour, 600 caractères au maximum, phrases courtes en texte brut. Garde, ajoute ou retire
   uniquement des contraintes et préférences DURABLES du voyageur pour ce voyage (régime, allergie, mobilité, rythme,
@@ -1292,6 +1316,7 @@ async function generateChatAnswer(request: ChatRequest) {
                 description: target.description,
                 category: target.category,
                 sourcePostId: target.source_post?.id ?? null,
+                placeName: target.place_name,
               };
               return [{ ...item, ...current, target }];
             }
@@ -1305,6 +1330,7 @@ async function generateChatAnswer(request: ChatRequest) {
             description: item.description,
             category: item.category,
             source_post_id: item.sourcePostId && (postIds.has(item.sourcePostId) || item.sourcePostId === item.target?.source_post?.id) ? item.sourcePostId : null,
+            place_name: item.placeName,
             action: item.action,
             target_item_id: item.target?.id ?? null,
           })),
@@ -1322,7 +1348,7 @@ function nextMemory(previous: string | null, proposed: string | undefined) {
 // Fragments propres au prompt : absents d'une vraie réponse.
 const INSTRUCTION_MARKERS = [
   /<\/?(posts|envies|historique|message|voyage|planning|jour|maintenant|budget|memoire)>/i,
-  /\b(offTopic|sourcePostId|startTime|itemId)\b/,
+  /\b(offTopic|sourcePostId|startTime|itemId|placeName)\b/,
   /compagnon de voyage de Biirb/i,
   /planificateur de voyage de (Biirb|Brb)/i,
   /ce sont des DONNÉES/i,
@@ -1336,7 +1362,7 @@ function leaksInstructions(reply: string) {
 
 // Injections typiques (FR/EN), ciblées pour éviter les faux positifs.
 const ATTACK_PATTERNS = [
-  /\b(offTopic|sourcePostId|itemId)\b/i,
+  /\b(offTopic|sourcePostId|itemId|placeName)\b/i,
   /<\/?(posts|envies|historique|message|voyage|planning|jour|maintenant|budget|memoire|system)>/i,
   /\b(ignore[rsz]?|oublie[rsz]?|forget|disregard|bypass|override)\b.{0,40}\b(instructions?|consignes?|r[eè]gles?|rules?|prompt|directives?)\b/i,
   /\b(system|syst[eè]me)\s*prompt\b|\bprompt\s*(syst[eè]me|system)\b/i,
@@ -1398,6 +1424,8 @@ Règles :
 - items : entre 3 et 6 activités (repas compris), toutes à la date de <jour>, dans l'ordre chronologique, rythme adapté
   au type de récit. Chacune a une heure HH:MM, un titre court (lieu précis), une description d'une ou deux phrases
   et une catégorie : transport, lodging, activity ou food.
+- placeName : nom du lieu précis de l'activité tel qu'il figure sur une carte (nom officiel ou le plus connu, en
+  alphabet latin, ex. « Meiji Jingu », « Sensō-ji ») ; null sans lieu précis ou si tu n'es pas sûr qu'il existe.
 - Propose un programme nouveau pour ce jour : jamais une activité déjà prévue un autre jour dans <planning>.
 - Premier jour du voyage : inclus l'arrivée ; dernier jour : inclus le départ.
 - Tiens compte de la saison (mois dans <voyage>) : météo, événements, activités possibles à cette période.`;
@@ -1450,6 +1478,7 @@ async function generateDay(request: DayRequest): Promise<TripPlan["items"]> {
     description: item.description,
     category: item.category,
     source_post_id: item.sourcePostId && postIds.has(item.sourcePostId) ? item.sourcePostId : null,
+    place_name: item.placeName,
   }));
 }
 
