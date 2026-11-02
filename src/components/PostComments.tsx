@@ -11,6 +11,7 @@ import { Button, buttonClassName } from "@/components/ui/Button";
 import { FormError } from "@/components/ui/FormError";
 import { Icon } from "@/components/ui/Icon";
 import { Textarea } from "@/components/ui/Textarea";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { UserRole } from "@/lib/roles";
 import { apiFetch, getSessionSnapshot, parseSessionUser, subscribeSession } from "@/client/session";
 
@@ -48,6 +49,7 @@ type User = ReturnType<typeof parseSessionUser>;
 // Supprimer : son propre commentaire, ou tout commentaire pour un admin (les réponses partent avec leur fil).
 export function PostComments({ postId, initialComments }: { postId: number; initialComments: PostComment[] }) {
   const t = useTranslations("Comments");
+  const confirm = useConfirm();
   const session = useSyncExternalStore(subscribeSession, getSessionSnapshot, () => null);
   const user = parseSessionUser(session);
   const [comments, setComments] = useState(initialComments);
@@ -56,7 +58,14 @@ export function PostComments({ postId, initialComments }: { postId: number; init
   const threads = comments.filter((comment) => comment.parent_id === null);
 
   async function remove(commentId: number) {
-    if (!window.confirm(t("deleteConfirm"))) return;
+    const confirmed = await confirm({
+      title: t("deleteConfirm.title"),
+      message: t("deleteConfirm.message"),
+      confirmLabel: t("deleteConfirm.action"),
+      icon: "delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     setError(null);
     const result = await apiFetch(`/api/v1/posts/${postId}/comments/${commentId}`, { method: "DELETE" });
     if ("data" in result || result.error === "NOT_FOUND") {

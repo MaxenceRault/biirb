@@ -9,6 +9,10 @@ export const TRIP_ITEM_CATEGORIES = ["transport", "lodging", "activity", "food"]
 export const TRIP_ITEM_COLORS = ["coral", "sky", "mint", "sun", "lavender", "sand", "rose", "slate"] as const;
 export const TRIP_SUGGESTION_ACTIONS = ["add", "update", "delete"] as const;
 export const TRIP_PDF_TEMPLATES = ["classic", "table", "booklet"] as const;
+// Changements de Biirbou annulables (« Annuler », le plus récent d'abord), pendant TRIP_UNDO_HOURS.
+export const TRIP_PLAN_CHANGE_KINDS = ["suggestion", "regenerate", "regenerate_day"] as const;
+export type TripPlanChangeKind = (typeof TRIP_PLAN_CHANGE_KINDS)[number];
+export const TRIP_UNDO_HOURS = 24;
 // Court : limite le coût par message.
 export const TRIP_MESSAGE_MAX = 500;
 // Mêmes limites que trip_destination et trip.instructions (db/migrations).

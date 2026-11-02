@@ -219,6 +219,12 @@ const tripDetail = {
       properties: { active: { type: "boolean" }, available: { type: "boolean" }, priceEur: { type: "number", nullable: true } },
     },
     chatLimit: { type: "integer", description: "Messages possibles dans la discussion IA (50, 200 avec le pass)" },
+    undo: {
+      type: "object",
+      nullable: true,
+      description: "Dernier changement de Biirbou annulable (POST /trips/{id}/undo) ; null : rien, délai de 24 h passé, planning modifié depuis, ou lecteur",
+      properties: { kind: { type: "string", enum: ["suggestion", "regenerate", "regenerate_day"] }, created_at: { type: "string", format: "date-time" } },
+    },
     aiQuota: {
       type: "object",
       description: "Requêtes IA du jour de l'utilisateur sur ce voyage (limit null : illimité, admin ; plafond plus haut avec le pass)",
@@ -592,6 +598,19 @@ export function buildOpenApiDocument() {
         post: tripRoute("Re-générer avec l'IA", {
           ai: true,
           description: "Remplace toutes les activités, la checklist et le budget.",
+        }),
+      },
+      "/trips/{id}/undo": {
+        post: tripRoute("Annuler le dernier changement de Biirbou", {
+          ok: {
+            200: json("Voyage à jour", tripDetail),
+            404: error("Rien à annuler (aucun changement de Biirbou depuis 24 h)", ["NOTHING_TO_UNDO"]),
+            409: error("Planning modifié à la main depuis ce changement : rien n'est restauré", ["PLAN_CHANGED"]),
+          },
+          description:
+            "Proposition acceptée, re-génération complète ou d'un jour : restaure le planning d'avant, le plus récent d'abord, " +
+            "pendant 24 h (TRIP_UNDO_HOURS). Une proposition annulée redevient en attente. Éditeur ou propriétaire. " +
+            "GET /trips/{id} renvoie undo : { kind, created_at } si une annulation est possible.",
         }),
       },
       "/trips/{id}/pass": {

@@ -1,4 +1,5 @@
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { getAnalyticsConfig } from "@/server/config";
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
@@ -42,7 +43,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           aria-hidden="true"
           className="pointer-events-none fixed inset-0 -z-10 bg-ink/5 [mask-image:url(/topo.svg)] [mask-size:60rem] print:hidden"
         />
-        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        <NextIntlClientProvider>
+          {/* Fenêtre de confirmation commune (useConfirm), à la place de window.confirm. */}
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </NextIntlClientProvider>
         <ServiceWorkerRegister />
         {/* Sans query ni fragment : ils portent des recherches, l'UUID d'un voyage, le code d'invitation et celui du mot de passe oublié. */}
         {analytics && (

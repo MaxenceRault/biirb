@@ -1,7 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { getDb } from "@/server/infra/db";
-import type { TripItemCategory, TripItemColor, TripSuggestionAction } from "@/schemas/trip.schema";
+import { TRIP_UNDO_HOURS, type TripItemCategory, type TripItemColor, type TripPlanChangeKind, type TripSuggestionAction } from "@/schemas/trip.schema";
 import type { TripAccessRole } from "@/schemas/trip-share.schema";
 
 export type TripSummary = {
@@ -272,10 +272,12 @@ export async function findTripTasks(tripId: number): Promise<TripTaskRow[]> {
 }
 
 // Une transaction : jamais de planning à moitié enregistré.
-export async function replaceTripPlan(tripId: number, plan: TripPlan) {
+// record : re-génération (annulable) ; false à la création du voyage (rien à restaurer).
+export async function replaceTripPlan(tripId: number, plan: TripPlan, { record }: { record: boolean }) {
   const client = await (await getDb()).connect();
   try {
     await client.query("begin");
+    const before = record ? await beginPlanChange(client, tripId, "regenerate") : null;
     await client.query("delete from trip_item where trip_id = $1", [tripId]);
     await client.query("delete from trip_task where trip_id = $1", [tripId]);
     await client.query("delete from trip_stop where trip_id = $1", [tripId]);
@@ -328,6 +330,7 @@ export async function replaceTripPlan(tripId: number, plan: TripPlan) {
        where id = $1`,
       [tripId, plan.budget.lodging, plan.budget.transit, plan.budget.dining, plan.budget.activities, plan.source_post_count, plan.season_note],
     );
+    if (before) await endPlanChange(client, tripId, "regenerate", before, null);
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");
@@ -342,6 +345,7 @@ export async function replaceTripDayItems(tripId: number, day: string, items: Tr
   const client = await (await getDb()).connect();
   try {
     await client.query("begin");
+    const before = await beginPlanChange(client, tripId, "regenerate_day");
     await client.query("delete from trip_item where trip_id = $1 and day = $2", [tripId, day]);
     if (items.length > 0) {
       await client.query(
@@ -358,6 +362,7 @@ export async function replaceTripDayItems(tripId: number, day: string, items: Tr
         ],
       );
     }
+    await endPlanChange(client, tripId, "regenerate_day", before, null);
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");
@@ -522,12 +527,14 @@ export async function answerTripSuggestion(tripId: number, suggestionId: number,
     }
 
     if (accepted) {
+      const before = await beginPlanChange(client, tripId, "suggestion");
       const applied = await applySuggestion(client, tripId, suggestionId, suggestion);
       if (!applied) {
         await client.query("update trip_suggestion set status = 'rejected' where id = $1", [suggestionId]);
         await client.query("commit");
         return "outdated";
       }
+      await endPlanChange(client, tripId, "suggestion", before, suggestionId);
     }
     await client.query("commit");
     return true;
@@ -569,4 +576,151 @@ async function applySuggestion(
     [suggestionId, targetId, tripId],
   );
   return rowCount === 1;
+}
+
+// Historique des changements de Biirbou (trip_plan_change) : photo avant, empreinte après, restauration par « Annuler ».
+// Contenu seulement (jamais les ids) : un planning restauré a de nouveaux ids mais la même empreinte.
+const PLAN_ITEMS = `coalesce((select json_agg(json_build_object('day', i.day, 'start_time', i.start_time, 'title', i.title,
+    'description', i.description, 'category', i.category, 'source_post_id', i.source_post_id, 'color', i.color)
+    order by i.day, i.start_time, i.title, i.description, i.category, i.color, i.source_post_id)
+  from trip_item i where i.trip_id = $1), '[]'::json)`;
+const PLAN_TASKS = `coalesce((select json_agg(json_build_object('label', t.label, 'detail', t.detail, 'done', t.done) order by t.id)
+  from trip_task t where t.trip_id = $1), '[]'::json)`;
+// Empreinte sans « fait » : cocher la checklist ne bloque pas l'annulation d'une re-génération.
+const PLAN_TASK_LABELS = `coalesce((select json_agg(json_build_array(t.label, t.detail) order by t.id)
+  from trip_task t where t.trip_id = $1), '[]'::json)`;
+const PLAN_STOPS = `coalesce((select json_agg(json_build_object('position', s.position, 'name', s.name, 'country_code', s.country_code,
+    'latitude', s.latitude, 'longitude', s.longitude, 'start_day', s.start_day, 'end_day', s.end_day) order by s.position)
+  from trip_stop s where s.trip_id = $1), '[]'::json)`;
+const PLAN_TRIP = `(select json_build_object('budget_lodging', t.budget_lodging, 'budget_transit', t.budget_transit,
+    'budget_dining', t.budget_dining, 'budget_activities', t.budget_activities, 'source_post_count', t.source_post_count,
+    'season_note', t.season_note, 'generated_at', t.generated_at)
+  from trip t where t.id = $1)`;
+const PLAN_TRIP_FINGERPRINT = `(select json_build_array(t.budget_lodging, t.budget_transit, t.budget_dining, t.budget_activities,
+    t.source_post_count, t.season_note)
+  from trip t where t.id = $1)`;
+
+type Queryable = Pick<PoolClient, "query">;
+
+// Proposition ou jour : les activités ; re-génération : tout ce qu'elle remplace (activités, checklist, séjours, budget).
+async function readPlanState(db: Queryable, tripId: number, kind: TripPlanChangeKind): Promise<{ snapshot: unknown; fingerprint: string }> {
+  const full = kind === "regenerate";
+  const { rows } = await db.query<{ snapshot: unknown; fingerprint: string }>(
+    `select json_build_object('items', ${PLAN_ITEMS}${full ? `, 'tasks', ${PLAN_TASKS}, 'stops', ${PLAN_STOPS}, 'trip', ${PLAN_TRIP}` : ""}) as snapshot,
+       md5(json_build_array(${PLAN_ITEMS}${full ? `, ${PLAN_TASK_LABELS}, ${PLAN_STOPS}, ${PLAN_TRIP_FINGERPRINT}` : ""})::text) as fingerprint`,
+    [tripId],
+  );
+  return rows[0];
+}
+
+// Voyage verrouillé : un changement et une annulation du même voyage ne se croisent jamais.
+async function beginPlanChange(client: PoolClient, tripId: number, kind: TripPlanChangeKind) {
+  await client.query("select id from trip where id = $1 for update", [tripId]);
+  return (await readPlanState(client, tripId, kind)).snapshot;
+}
+
+async function endPlanChange(client: PoolClient, tripId: number, kind: TripPlanChangeKind, snapshot: unknown, suggestionId: number | null) {
+  const { fingerprint } = await readPlanState(client, tripId, kind);
+  // Au-delà du délai, plus rien n'est annulable : l'historique ne grossit pas.
+  await client.query("delete from trip_plan_change where trip_id = $1 and created_at < now() - make_interval(hours => $2)", [tripId, TRIP_UNDO_HOURS]);
+  await client.query(
+    "insert into trip_plan_change (trip_id, kind, suggestion_id, snapshot, fingerprint) values ($1, $2, $3, $4, $5)",
+    [tripId, kind, suggestionId, JSON.stringify(snapshot), fingerprint],
+  );
+}
+
+type PlanChangeRow = { id: number; kind: TripPlanChangeKind; suggestion_id: number | null; fingerprint: string; created_at: string };
+
+async function findLastPlanChange(db: Queryable, tripId: number): Promise<PlanChangeRow | null> {
+  const { rows } = await db.query<PlanChangeRow>(
+    `select id, kind, suggestion_id, fingerprint, created_at from trip_plan_change
+     where trip_id = $1 and created_at >= now() - make_interval(hours => $2)
+     order by id desc limit 1`,
+    [tripId, TRIP_UNDO_HOURS],
+  );
+  return rows[0] ?? null;
+}
+
+// Dernier changement encore annulable : dans le délai, et planning inchangé depuis (sinon l'annuler effacerait ces modifications).
+export async function findUndoablePlanChange(tripId: number): Promise<{ kind: TripPlanChangeKind; created_at: string } | null> {
+  const db = await getDb();
+  const change = await findLastPlanChange(db, tripId);
+  if (!change) return null;
+  const { fingerprint } = await readPlanState(db, tripId, change.kind);
+  return fingerprint === change.fingerprint ? { kind: change.kind, created_at: change.created_at } : null;
+}
+
+// "none" : rien à annuler (ou délai passé). "changed" : planning modifié à la main depuis, rien n'est restauré.
+export async function undoLastPlanChange(tripId: number): Promise<"undone" | "none" | "changed"> {
+  const client = await (await getDb()).connect();
+  try {
+    await client.query("begin");
+    await client.query("select id from trip where id = $1 for update", [tripId]);
+    const change = await findLastPlanChange(client, tripId);
+    if (!change) {
+      await client.query("rollback");
+      return "none";
+    }
+    if ((await readPlanState(client, tripId, change.kind)).fingerprint !== change.fingerprint) {
+      await client.query("rollback");
+      return "changed";
+    }
+
+    // Récit supprimé depuis : l'activité restaurée perd seulement son lien (comme le on delete set null de trip_item).
+    await client.query("delete from trip_item where trip_id = $1", [tripId]);
+    await client.query(
+      `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, color)
+       select $1, x.day, x.start_time, x.title, x.description, x.category, (select p.id from post p where p.id = x.source_post_id), x.color
+       from trip_plan_change c,
+         jsonb_to_recordset(c.snapshot -> 'items')
+           as x (day date, start_time time, title varchar, description varchar, category trip_item_category, source_post_id int, color varchar)
+       where c.id = $2`,
+      [tripId, change.id],
+    );
+    if (change.kind === "regenerate") {
+      await client.query("delete from trip_task where trip_id = $1", [tripId]);
+      await client.query(
+        `insert into trip_task (trip_id, label, detail, done)
+         select $1, x.label, x.detail, x.done
+         from trip_plan_change c,
+           rows from (jsonb_to_recordset(c.snapshot -> 'tasks') as (label varchar, detail varchar, done boolean))
+             with ordinality as x (label, detail, done, n)
+         where c.id = $2 order by x.n`,
+        [tripId, change.id],
+      );
+      await client.query("delete from trip_stop where trip_id = $1", [tripId]);
+      await client.query(
+        `insert into trip_stop (trip_id, position, name, country_code, latitude, longitude, start_day, end_day)
+         select $1, x.position, x.name, x.country_code, x.latitude, x.longitude, x.start_day, x.end_day
+         from trip_plan_change c,
+           jsonb_to_recordset(c.snapshot -> 'stops')
+             as x (position smallint, name varchar, country_code char(2), latitude float8, longitude float8, start_day date, end_day date)
+         where c.id = $2`,
+        [tripId, change.id],
+      );
+      await client.query(
+        `update trip t set budget_lodging = x.budget_lodging, budget_transit = x.budget_transit, budget_dining = x.budget_dining,
+           budget_activities = x.budget_activities, source_post_count = x.source_post_count, season_note = x.season_note,
+           generated_at = x.generated_at
+         from trip_plan_change c,
+           jsonb_to_record(c.snapshot -> 'trip')
+             as x (budget_lodging int, budget_transit int, budget_dining int, budget_activities int, source_post_count int,
+               season_note varchar, generated_at timestamptz)
+         where c.id = $2 and t.id = $1`,
+        [tripId, change.id],
+      );
+    }
+    // La proposition annulée redevient une proposition en attente : l'utilisateur peut encore l'accepter plus tard.
+    if (change.suggestion_id !== null) {
+      await client.query("update trip_suggestion set status = 'pending' where id = $1 and trip_id = $2", [change.suggestion_id, tripId]);
+    }
+    await client.query("delete from trip_plan_change where id = $1", [change.id]);
+    await client.query("commit");
+    return "undone";
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
