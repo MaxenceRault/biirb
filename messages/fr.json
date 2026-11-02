@@ -543,6 +543,35 @@
       "upgrade": "Pass voyage",
       "left": "{count, plural, =0 {Biirbou a fini sa journée : il revient demain.} one {Biirbou peut encore vous aider <strong># fois</strong> aujourd'hui.} other {Biirbou peut encore vous aider <strong># fois</strong> aujourd'hui.}}"
     },
+    "whatNow": {
+      "open": "Que faire maintenant ?",
+      "title": "Que faire maintenant ?",
+      "description": "Jour {number} du voyage : Biirbou cherche une idée pour tout de suite, selon l'heure sur place et le temps libre avant votre prochaine activité.",
+      "message": "Que faire maintenant ?",
+      "energy": {
+        "label": "Comment vous sentez-vous ?",
+        "tired": "Fatigué",
+        "motivated": "Motivé",
+        "relaxed": "Envie de détente"
+      },
+      "where": {
+        "label": "Où êtes-vous ?",
+        "locate": "Utiliser ma position",
+        "locating": "Localisation…",
+        "located": "Position partagée, à 1 km près",
+        "forget": "Retirer",
+        "placeLabel": "Ou je suis à…",
+        "placeholder": "Un quartier, un lieu (ex. Shibuya)",
+        "privacy": "Tout est facultatif. Votre position est arrondie à 1 km près, sert à cette question seulement et n'est jamais enregistrée.",
+        "errors": {
+          "denied": "Position refusée par le navigateur : indiquez plutôt où vous êtes.",
+          "unavailable": "Position introuvable pour l'instant : indiquez plutôt où vous êtes.",
+          "unsupported": "Ce navigateur ne partage pas de position : indiquez plutôt où vous êtes."
+        }
+      },
+      "submit": "Demander à Biirbou",
+      "cancel": "Retour"
+    },
     "errors": {
       "INVALID_INPUT": "Vérifiez les champs du formulaire.",
       "TRIP_TOO_LONG": "Un voyage dure 3 mois maximum : raccourcissez les dates.",

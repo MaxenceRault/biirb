@@ -1,4 +1,5 @@
 import "server-only";
+import tzLookup from "@photostructure/tz-lookup";
 import { City, Country, State } from "country-state-city";
 
 // Serveur uniquement : la librairie pèse ~17 Mo.
@@ -98,6 +99,33 @@ export function placeCoordinates({ country, state, city }: { country: string; st
   const longitude = Number(place?.longitude);
   return place?.latitude && place.longitude && Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : null;
 }
+
+// Fuseau horaire IANA d'un point (ex. « Asia/Tokyo »), calculé hors ligne : null si les coordonnées sont invalides.
+export function timeZoneAt({ latitude, longitude }: { latitude: number; longitude: number }) {
+  try {
+    return tzLookup(latitude, longitude);
+  } catch {
+    return null;
+  }
+}
+
+// Ville la plus proche d'un point (position du voyageur), à 30 km au plus : null en pleine nature ou en mer.
+export function nearestCity({ latitude, longitude }: { latitude: number; longitude: number }) {
+  let best: { name: string; country: string; distance: number } | null = null;
+  const scale = Math.cos((latitude * Math.PI) / 180);
+  for (const city of City.getAllCities()) {
+    const dLat = Number(city.latitude) - latitude;
+    if (!city.latitude || !city.longitude || Math.abs(dLat) > NEAREST_CITY_MAX_DEGREES) continue;
+    const dLon = (Number(city.longitude) - longitude) * scale;
+    // Distance approchée (projection équirectangulaire), suffisante à cette échelle.
+    const distance = Math.hypot(dLat, dLon);
+    if (distance <= NEAREST_CITY_MAX_DEGREES && (!best || distance < best.distance)) best = { name: city.name, country: city.countryCode, distance };
+  }
+  return best && { city: best.name, country: new Intl.DisplayNames(["fr"], { type: "region" }).of(best.country) ?? best.country };
+}
+
+// ≈ 30 km.
+const NEAREST_CITY_MAX_DEGREES = 0.27;
 
 // Ville d'un pays retrouvée par son nom (nom écrit par l'IA : accents, casse, suffixes « -shi » ignorés), sinon une région.
 // null : lieu inconnu de la librairie (rien n'est placé sur la carte).

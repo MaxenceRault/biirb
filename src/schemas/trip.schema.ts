@@ -15,6 +15,11 @@ export type TripPlanChangeKind = (typeof TRIP_PLAN_CHANGE_KINDS)[number];
 export const TRIP_UNDO_HOURS = 24;
 // Court : limite le coût par message.
 export const TRIP_MESSAGE_MAX = 500;
+// Énergie du voyageur (« Que faire maintenant ? ») : fatigué, motivé, envie de détente.
+export const TRIP_ENERGY_LEVELS = ["tired", "motivated", "relaxed"] as const;
+export type TripEnergyLevel = (typeof TRIP_ENERGY_LEVELS)[number];
+// « Je suis à… » : un quartier ou un lieu.
+export const TRIP_PLACE_MAX = 100;
 // Mêmes limites que trip_destination et trip.instructions (db/migrations).
 export const TRIP_MAX_DESTINATIONS = 8;
 export const TRIP_INSTRUCTIONS_MAX = 1000;
@@ -76,9 +81,25 @@ export const tripPassCheckoutSchema = z.strictObject({
   waiveWithdrawal: z.literal(true),
 });
 
-export const sendTripMessageSchema = z.strictObject({
-  content: z.string().trim().min(2).max(TRIP_MESSAGE_MAX),
-});
+// Arrondi à 2 décimales (≈ 1 km) : jamais la position exacte, même si le navigateur l'envoie.
+const coordinate = (limit: number) =>
+  z
+    .number()
+    .min(-limit)
+    .max(limit)
+    .transform((value) => Math.round(value * 100) / 100);
+
+// Où est le voyageur (« Que faire maintenant ? ») : GPS arrondi ou lieu écrit à la main, l'un ou l'autre. Jamais enregistré.
+export const sendTripMessageSchema = z
+  .strictObject({
+    content: z.string().trim().min(2).max(TRIP_MESSAGE_MAX),
+    position: z.strictObject({ latitude: coordinate(90), longitude: coordinate(180) }).optional(),
+    place: z.string().trim().min(2).max(TRIP_PLACE_MAX).optional(),
+    energy: z.enum(TRIP_ENERGY_LEVELS).optional(),
+  })
+  .refine((body) => !(body.position && body.place));
+// Contexte du moment, envoyé avec une question puis oublié.
+export type TripMessageContext = Pick<z.infer<typeof sendTripMessageSchema>, "position" | "place" | "energy">;
 
 export const answerTripSuggestionSchema = z.strictObject({
   accepted: z.boolean(),

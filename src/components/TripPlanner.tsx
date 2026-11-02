@@ -27,10 +27,12 @@ import { buildTripCsv, downloadFile } from "@/client/tripExport";
 import { TripPassCard, TripPassDialog, type TripPass, type TripPassFeature } from "@/components/TripPassCard";
 import { exportFileName } from "@/lib/fileName";
 import { TripTableView } from "@/components/TripTableView";
+import { WhatNowDialog } from "@/components/TripWhatNow";
 import {
   TRIP_PDF_TEMPLATES,
   TRIP_UNDO_HOURS,
   type TripItemColor,
+  type TripMessageContext,
   type TripPdfTemplate,
   type TripPlanChangeKind,
 } from "@/schemas/trip.schema";
@@ -97,6 +99,8 @@ export type TripDetail = {
   map: TripMapData;
   // Dernier changement de Biirbou encore annulable (null : rien, délai passé, planning modifié depuis, ou lecteur).
   undo: { kind: TripPlanChangeKind; created_at: string } | null;
+  // Voyage en cours, jour local à la destination (null : avant, après, ou lecteur).
+  live: { day: string; dayNumber: number } | null;
 };
 
 type TripSuggestion = Omit<TripItem, "id" | "color"> & {
@@ -301,7 +305,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     );
   }
 
-  const { trip, items, tasks, role, pass, chatLimit, mapsUrls, aiQuota, map, undo: lastChange } = state.data;
+  const { trip, items, tasks, role, pass, chatLimit, mapsUrls, aiQuota, map, undo: lastChange, live } = state.data;
   // Lecteur : consultation seule (l'API refuse de toute façon les modifications).
   const canEdit = role !== "viewer";
 
@@ -386,6 +390,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
               basePath={basePath}
               refreshKey={chatVersion}
               trip={trip}
+              live={live}
               mutate={mutate}
               canEdit={canEdit}
               chatLimit={chatLimit}
@@ -1118,6 +1123,7 @@ function TripChat({
   basePath,
   refreshKey,
   trip,
+  live,
   mutate,
   canEdit,
   chatLimit,
@@ -1128,6 +1134,7 @@ function TripChat({
   basePath: string;
   refreshKey: number;
   trip: Trip;
+  live: TripDetail["live"];
   mutate: Mutate;
   canEdit: boolean;
   chatLimit: number;
@@ -1140,7 +1147,11 @@ function TripChat({
   const router = useRouter();
   const [messages, setMessages] = useState<TripMessage[] | null>(null);
   const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
+  // Message en cours d'envoi (affiché tout de suite, avant la réponse de Biirbou).
+  const [pending, setPending] = useState<string | null>(null);
+  const sending = pending !== null;
+  const [whatNow, setWhatNow] = useState(false);
+  const card = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<PlannerError | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const days = tripDays(trip.start_date, trip.end_date);
@@ -1168,43 +1179,61 @@ function TripChat({
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
   }, [messages, sending]);
 
-  async function send() {
-    const content = draft.trim();
-    if (content.length < 2 || sending) return;
-    if (quotaReached) return passActive ? undefined : onUpsell("ai");
+  // context (« Que faire maintenant ? ») : énergie, position ou lieu, envoyés avec ce message seulement.
+  async function send(content: string, context: TripMessageContext = {}) {
+    if (content.length < 2 || sending) return false;
+    if (quotaReached) {
+      if (!passActive) onUpsell("ai");
+      return false;
+    }
 
-    setSending(true);
+    setPending(content);
     setError(null);
     const result = await apiFetch<{ messages: TripMessage[] }>(`${basePath}/messages`, {
       method: "POST",
-      body: { content },
+      body: { content, ...context },
     });
-    setSending(false);
+    setPending(null);
 
     if ("data" in result) {
       setMessages(result.data.messages);
-      setDraft("");
       setCounter({ base: aiQuota.used, sent: used - aiQuota.used + 1 });
-      return;
+      return true;
     }
-    if (result.error === "UNAUTHORIZED") return router.replace("/login");
+    if (result.error === "UNAUTHORIZED") {
+      router.replace("/login");
+      return false;
+    }
     if (result.error === "DAILY_LIMIT_REACHED" && aiQuota.limit !== null) setCounter({ base: aiQuota.used, sent: aiQuota.limit - aiQuota.used });
     // Sans pass : le pass est proposé à la place du message d'erreur.
     if (!passActive && (result.error === "DAILY_LIMIT_REACHED" || result.error === "CHAT_LIMIT_REACHED")) {
-      return onUpsell(result.error === "DAILY_LIMIT_REACHED" ? "ai" : "chat");
+      onUpsell(result.error === "DAILY_LIMIT_REACHED" ? "ai" : "chat");
+      return false;
     }
     setError(plannerError(result.error));
+    return false;
+  }
+
+  async function sendDraft() {
+    if (await send(draft.trim())) setDraft("");
+  }
+
+  function askWhatNow(context: TripMessageContext) {
+    setWhatNow(false);
+    // Sur mobile, la discussion est sous le planning : on la montre pendant que Biirbou répond.
+    card.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    void send(t("whatNow.message"), context);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void send();
+    void sendDraft();
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      void send();
+      void sendDraft();
     }
   }
 
@@ -1221,7 +1250,7 @@ function TripChat({
   }
 
   return (
-    <Card className="flex flex-col gap-4 p-6">
+    <Card ref={card} className="flex scroll-mt-24 flex-col gap-4 p-6">
       <div className="flex flex-col gap-1">
         <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
           <Icon name="sparkles" className="size-5 text-accent" />
@@ -1239,6 +1268,17 @@ function TripChat({
           </p>
         )}
       </div>
+
+      {/* Pendant le voyage seulement : Biirbou connaît alors l'heure sur place et le temps libre avant la suite. */}
+      {live && canEdit && remaining > 0 && (
+        <>
+          <Button onClick={() => (quotaReached && !passActive ? onUpsell("ai") : setWhatNow(true))} disabled={sending} className="gap-2">
+            <Icon name="explore" className="size-5" />
+            {t("whatNow.open")}
+          </Button>
+          <WhatNowDialog open={whatNow} dayNumber={live.dayNumber} onClose={() => setWhatNow(false)} onAsk={askWhatNow} />
+        </>
+      )}
 
       <div ref={scroller} className="flex max-h-[32rem] flex-col gap-3 overflow-y-auto" aria-live="polite">
         {messages === null && !error && <div className="h-16 animate-pulse rounded-lg bg-surface-muted" aria-hidden="true" />}
@@ -1281,7 +1321,7 @@ function TripChat({
         {sending && (
           <>
             <p className="max-w-[85%] self-end rounded-lg bg-ink px-3 py-2 text-body-sm whitespace-pre-line text-surface">
-              {draft.trim()}
+              {pending}
             </p>
             <div className="self-start rounded-lg bg-surface-muted px-3 py-2">
               <ReasoningText phrases={t.raw("chat.reasoning") as string[]} />

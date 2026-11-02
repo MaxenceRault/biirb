@@ -153,7 +153,7 @@ export function sendTripMessageController(request: Request, { params }: { params
       return errorResponse(429, "TOO_MANY_REQUESTS");
     }
 
-    return json({ messages: await sendTripMessage(userId, tripId, body.content) }, 201);
+    return json({ messages: await sendTripMessage(userId, tripId, body.content, { position: body.position, place: body.place, energy: body.energy }) }, 201);
   });
 }
 

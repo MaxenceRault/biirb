@@ -225,6 +225,12 @@ const tripDetail = {
       description: "Dernier changement de Biirbou annulable (POST /trips/{id}/undo) ; null : rien, délai de 24 h passé, planning modifié depuis, ou lecteur",
       properties: { kind: { type: "string", enum: ["suggestion", "regenerate", "regenerate_day"] }, created_at: { type: "string", format: "date-time" } },
     },
+    live: {
+      type: "object",
+      nullable: true,
+      description: "Voyage en cours (bouton « Que faire maintenant ? ») : jour local à la destination ; null avant, après, ou lecteur",
+      properties: { day: { type: "string", format: "date" }, dayNumber: { type: "integer" } },
+    },
     aiQuota: {
       type: "object",
       description: "Requêtes IA du jour de l'utilisateur sur ce voyage (limit null : illimité, admin ; plafond plus haut avec le pass)",
@@ -672,7 +678,10 @@ export function buildOpenApiDocument() {
           },
           description:
             "Limitée au voyage et à sa destination (hors sujet : off_topic, aucune proposition). Message traité comme " +
-            "une donnée non fiable. Les activités proposées restent en attente jusqu'à la réponse de l'utilisateur.",
+            "une donnée non fiable. Les activités proposées restent en attente jusqu'à la réponse de l'utilisateur. " +
+            "position (arrondie à 2 décimales par le serveur) ou place (« Je suis à… », l'un ou l'autre) : utilisés " +
+            "seulement pendant le voyage, jamais enregistrés. energy (tired, motivated, relaxed) : adapte les propositions, " +
+            "jamais enregistrée.",
         }),
       },
       "/trips/{id}/suggestions/{suggestionId}": {
