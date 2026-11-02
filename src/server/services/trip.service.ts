@@ -71,6 +71,8 @@ export class TripError extends Error {
   constructor(
     public readonly code:
       | "INVALID_INPUT"
+      // Temps de trajet : OpenRouteService indisponible (quota, panne, clé absente).
+      | "TRAVEL_UNAVAILABLE"
       | "TRIP_TOO_LONG"
       // Envies du voyageur refusées (tentative d'injection connue) : l'IA n'est pas appelée.
       | "INSTRUCTIONS_REJECTED"
@@ -221,12 +223,14 @@ function citiesByDay(trip: TripRow, items: TripItemRow[]) {
   const pins = new Map<string, MapPin & { days: Set<string> }>();
   const visits: string[] = [];
   // Dernière ville citée chaque jour : là où dort le voyageur.
-  const cityOfDay = new Map<string, MapPin & { days: Set<string> }>();
+  const cityOfDay = new Map<string, DayArea>();
+  const countryOf = new Map<string, string>();
   const lastOfDay = new Map<string, string>();
   for (const item of items) {
     for (const city of findCitiesInText(`${item.title}. ${item.description ?? ""}`, countries)) {
       const key = `${city.country}:${city.name}`;
       if (!pins.has(key)) pins.set(key, { name: city.name, latitude: city.latitude, longitude: city.longitude, stays: [], days: new Set() });
+      countryOf.set(key, city.country);
       pins.get(key)!.days.add(item.day);
       if (visits.at(-1) !== key) visits.push(key);
       lastOfDay.set(item.day, key);
@@ -238,9 +242,29 @@ function citiesByDay(trip: TripRow, items: TripItemRow[]) {
   for (const day of allTripDays(trip.start_date, trip.end_date)) {
     if (lastOfDay.has(day)) current = lastOfDay.get(day);
     else if (current) pins.get(current)!.days.add(day);
-    if (current) cityOfDay.set(day, pins.get(current)!);
+    if (current) {
+      const { name, latitude, longitude } = pins.get(current)!;
+      cityOfDay.set(day, { name, latitude, longitude, country: countryOf.get(current)! });
+    }
   }
   return { pins, visits, cityOfDay };
+}
+
+// Où est le voyageur un jour donné (heure locale, recherche des lieux de ses activités) : ville citée ce jour-là ou
+// la veille, sinon séjour donné par Biirbou, sinon première étape. name : null hors ville citée.
+export type DayArea = { name: string | null; latitude: number; longitude: number; country: string };
+
+export function tripDayAreas(trip: TripRow, items: TripItemRow[]): (day: string) => DayArea | null {
+  const { cityOfDay } = citiesByDay(trip, items);
+  const firstPlace = routeOrder(tripDestinations(trip))[0];
+  const firstPoint = firstPlace && placeCoordinates({ country: firstPlace.country_code, state: firstPlace.state_code, city: firstPlace.city });
+  return (day) => {
+    const city = cityOfDay.get(day);
+    if (city) return city;
+    const stop = trip.stops.find((option) => option.start_day <= day && day <= option.end_day) ?? trip.stops[0];
+    if (stop) return { name: stop.name, latitude: stop.latitude, longitude: stop.longitude, country: stop.country_code };
+    return firstPoint ? { name: firstPlace.city, ...firstPoint, country: firstPlace.country_code } : null;
+  };
 }
 
 type TripLocalNow = { day: string; dayNumber: number; time: string; timeZone: string; free: FreeSlot };
@@ -250,15 +274,13 @@ type FreeSlot = { minutes: number; until: string | null; nextItemId: number | nu
 // Voyage en cours : jour du planning et heure locale là où est le voyageur (fuseau de la ville du jour, sinon du séjour,
 // sinon de la première étape). null avant ou après le voyage. Les heures du planning sont déjà celles de la destination.
 function tripLocalNow(trip: TripRow, items: TripItemRow[], now = new Date()): TripLocalNow | null {
-  const { cityOfDay } = citiesByDay(trip, items);
-  const firstPlace = routeOrder(tripDestinations(trip))[0];
-  const firstPoint = firstPlace && placeCoordinates({ country: firstPlace.country_code, state: firstPlace.state_code, city: firstPlace.city });
+  const areaOf = tripDayAreas(trip, items);
   const today = now.toISOString().slice(0, 10);
   // Selon le fuseau, la date locale est la veille, le jour même ou le lendemain de la date UTC.
   for (const offset of [0, -1, 1]) {
     const day = new Date(Date.parse(`${today}T12:00:00Z`) + offset * DAY_MS).toISOString().slice(0, 10);
     if (!isDuringTrip(trip.start_date, trip.end_date, day)) continue;
-    const point = cityOfDay.get(day) ?? trip.stops.find((stop) => stop.start_day <= day && day <= stop.end_day) ?? trip.stops[0] ?? firstPoint;
+    const point = areaOf(day);
     const timeZone = point ? timeZoneAt(point) : null;
     if (!timeZone) continue;
     const local = localDateTime(now, timeZone);

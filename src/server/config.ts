@@ -90,6 +90,9 @@ const envSchema = z.object({
   // Exports PDF / .ics et commandes du pass voyage, par utilisateur : un PDF se calcule sur l'unique instance.
   RATE_LIMIT_TRIP_EXPORT_MAX: count.default(20),
   RATE_LIMIT_TRIP_EXPORT_WINDOW_SECONDS: seconds.default(15 * 60),
+  // Temps de trajet d'un jour, par utilisateur : chaque affichage peut appeler OpenRouteService (quota journalier).
+  RATE_LIMIT_TRIP_TRAVEL_MAX: count.default(60),
+  RATE_LIMIT_TRIP_TRAVEL_WINDOW_SECONDS: seconds.default(15 * 60),
 }).refine((env) => env.JWT_REFRESH_SECRET !== env.JWT_SECRET, {
   path: ["JWT_REFRESH_SECRET"],
   message: "doit être différente de JWT_SECRET",
@@ -112,7 +115,7 @@ export type ServerConfig = {
   aiDailyLimitPerUser: number;
   aiDailyLimitTripPass: number;
   rateLimits: Record<
-    "login" | "loginEmail" | "refresh" | "register" | "forgotPassword" | "forgotPasswordEmail" | "resetPassword" | "locations" | "feed" | "postCreate" | "postEdit" | "postReact" | "profileView" | "profileUpdate" | "report" | "ticket" | "admin" | "comment" | "tripAi" | "tripChat" | "tripShare" | "tripExpense" | "tripExport",
+    "login" | "loginEmail" | "refresh" | "register" | "forgotPassword" | "forgotPasswordEmail" | "resetPassword" | "locations" | "feed" | "postCreate" | "postEdit" | "postReact" | "profileView" | "profileUpdate" | "report" | "ticket" | "admin" | "comment" | "tripAi" | "tripChat" | "tripShare" | "tripExpense" | "tripExport" | "tripTravel",
     RateLimit
   >;
 };
@@ -174,6 +177,7 @@ export function getConfig(): ServerConfig {
       tripShare: rateLimit(env.RATE_LIMIT_TRIP_SHARE_MAX, env.RATE_LIMIT_TRIP_SHARE_WINDOW_SECONDS),
       tripExpense: rateLimit(env.RATE_LIMIT_TRIP_EXPENSE_MAX, env.RATE_LIMIT_TRIP_EXPENSE_WINDOW_SECONDS),
       tripExport: rateLimit(env.RATE_LIMIT_TRIP_EXPORT_MAX, env.RATE_LIMIT_TRIP_EXPORT_WINDOW_SECONDS),
+      tripTravel: rateLimit(env.RATE_LIMIT_TRIP_TRAVEL_MAX, env.RATE_LIMIT_TRIP_TRAVEL_WINDOW_SECONDS),
     },
   };
   return config;

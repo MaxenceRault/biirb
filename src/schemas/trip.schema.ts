@@ -15,6 +15,9 @@ export type TripPlanChangeKind = (typeof TRIP_PLAN_CHANGE_KINDS)[number];
 export const TRIP_UNDO_HOURS = 24;
 // Court : limite le coût par message.
 export const TRIP_MESSAGE_MAX = 500;
+// Modes des temps de trajet (OpenRouteService, comme le type travel_profile) : pas de transports en commun.
+export const TRAVEL_PROFILES = ["foot-walking", "driving-car"] as const;
+export type TravelProfile = (typeof TRAVEL_PROFILES)[number];
 // Énergie du voyageur (« Que faire maintenant ? ») : fatigué, motivé, envie de détente.
 export const TRIP_ENERGY_LEVELS = ["tired", "motivated", "relaxed"] as const;
 export type TripEnergyLevel = (typeof TRIP_ENERGY_LEVELS)[number];

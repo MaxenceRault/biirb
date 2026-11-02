@@ -26,6 +26,7 @@ import {
   updateTripItem,
   updateTripTask,
 } from "@/server/services/trip.service";
+import { getDayTravel } from "@/server/services/trip-travel.service";
 import { resolveTripId, TripAccessError } from "@/server/services/trip-access.service";
 import { startTripPassCheckout, TripPassError } from "@/server/services/trip-pass.service";
 import {
@@ -116,6 +117,17 @@ export function regenerateTripDayController(request: Request, { params }: { para
     if (!day.success) return errorResponse(400, "INVALID_INPUT");
     if (isAiRateLimited(userId)) return errorResponse(429, "TOO_MANY_REQUESTS");
     return json(await regenerateTripDay(userId, tripId, day.data));
+  });
+}
+
+// GET /api/v1/trips/[id]/days/[day]/travel (pass voyage)
+export function getDayTravelController(request: Request, { params }: { params: Params }) {
+  return withTrip(request, params, async (userId, tripId, routeParams) => {
+    const day = dayParamSchema.safeParse(routeParams.day);
+    if (!day.success) return errorResponse(400, "INVALID_INPUT");
+    const { max, windowMs } = getConfig().rateLimits.tripTravel;
+    if (isRateLimited(`trips:travel:${userId}`, max, windowMs)) return errorResponse(429, "TOO_MANY_REQUESTS");
+    return json(await getDayTravel(userId, tripId, day.data));
   });
 }
 
@@ -302,6 +314,7 @@ function handleError(error: unknown) {
   if (error instanceof TripError) {
     if (error.code === "NOT_FOUND") return errorResponse(404, "NOT_FOUND");
     if (error.code === "AI_UNAVAILABLE") return errorResponse(503, "AI_UNAVAILABLE");
+    if (error.code === "TRAVEL_UNAVAILABLE") return errorResponse(503, "TRAVEL_UNAVAILABLE");
     if (error.code === "CHAT_LIMIT_REACHED") return errorResponse(429, "CHAT_LIMIT_REACHED");
     if (error.code === "SUGGESTION_OUTDATED") return errorResponse(409, "SUGGESTION_OUTDATED");
     if (error.code === "NOTHING_TO_UNDO") return errorResponse(404, "NOTHING_TO_UNDO");

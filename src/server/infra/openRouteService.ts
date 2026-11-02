@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { getRoutingConfig } from "@/server/config";
+import type { TravelProfile } from "@/schemas/trip.schema";
 
 // OpenRouteService (données OpenStreetMap, © openrouteservice.org by HeiGIT) : recherche de lieux et trajets.
 // Appelé côté serveur uniquement : la clé ne quitte jamais le serveur. Réponses revalidées (service externe).
@@ -12,7 +13,6 @@ const SEARCH_RESULTS = 5;
 
 export type GeoPoint = { latitude: number; longitude: number };
 export type PlaceCandidate = GeoPoint & { name: string; layer: string };
-export type TravelProfile = "foot-walking" | "driving-car";
 export type TravelLegResult = { durationSeconds: number; distanceMeters: number } | null;
 
 const coordinates = z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]);
@@ -65,20 +65,21 @@ export async function searchPlaces(text: string, { near, country }: { near: GeoP
   }));
 }
 
-// Trajets entre points consécutifs (A→B, B→C…) en un seul appel : null si aucun itinéraire (île, point isolé).
-export async function consecutiveLegs(points: GeoPoint[], profile: TravelProfile): Promise<TravelLegResult[]> {
-  if (points.length < 2) return [];
+// Trajets de plusieurs tronçons (départ → arrivée) en un seul appel : null si aucun itinéraire (île, point isolé).
+export async function travelLegs(pairs: [GeoPoint, GeoPoint][], profile: TravelProfile): Promise<TravelLegResult[]> {
+  if (pairs.length === 0) return [];
+  // Départs aux indices pairs, arrivées aux indices impairs : la matrice ne calcule que départs × arrivées.
   const body = {
-    locations: points.map(({ latitude, longitude }) => [longitude, latitude]),
-    sources: points.slice(0, -1).map((_, index) => index),
-    destinations: points.slice(1).map((_, index) => index + 1),
+    locations: pairs.flat().map(({ latitude, longitude }) => [longitude, latitude]),
+    sources: pairs.map((_, index) => index * 2),
+    destinations: pairs.map((_, index) => index * 2 + 1),
     metrics: ["duration", "distance"],
   };
   const { durations, distances } = matrixSchema.parse(
     await call(`/v2/matrix/${profile}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   );
-  // Ligne i = départ i, colonne i = arrivée i + 1 : le tronçon i est sur la diagonale.
-  return points.slice(1).map((_, index) => {
+  // Ligne i = départ i, colonne i = son arrivée : le tronçon i est sur la diagonale.
+  return pairs.map((_, index) => {
     const duration = durations[index]?.[index];
     const distance = distances[index]?.[index];
     return duration == null || distance == null ? null : { durationSeconds: Math.round(duration), distanceMeters: Math.round(distance) };
