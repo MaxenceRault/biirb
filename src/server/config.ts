@@ -315,6 +315,28 @@ export function getAnalyticsConfig(): AnalyticsConfig | null {
   });
 }
 
+// Temps de trajet (OpenRouteService, pass voyage) : clé absente ou invalide, seuls les trajets sont coupés.
+const routingSchema = z.object({ ORS_API_KEY: z.string().regex(/^[A-Za-z0-9+/=_-]{20,200}$/) });
+
+export type RoutingConfig = { apiKey: string };
+
+let routing: RoutingConfig | null | undefined;
+
+export function getRoutingConfig(): RoutingConfig | null {
+  if (routing !== undefined) return routing;
+
+  const { ORS_API_KEY } = process.env;
+  if (!ORS_API_KEY) return (routing = null);
+
+  const parsed = routingSchema.safeParse({ ORS_API_KEY });
+  if (!parsed.success) {
+    // Jamais la valeur dans le log.
+    logError("config", "invalid routing env (travel times disabled): ORS_API_KEY");
+    return (routing = null);
+  }
+  return (routing = { apiKey: parsed.data.ORS_API_KEY });
+}
+
 // Base des liens absolus des métadonnées (og:url) : sans APP_URL, Next se rabat sur localhost.
 const siteUrlSchema = z.url({ protocol: /^https?$/ });
 
