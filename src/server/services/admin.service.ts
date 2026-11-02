@@ -24,6 +24,7 @@ import { revokeUserRefreshTokens } from "@/server/repositories/refresh-token.rep
 import { closeOpenReports, countOpenReports, findOpenReports } from "@/server/repositories/report.repository";
 import {
   deleteUserById,
+  findActiveAdmins,
   findUserAccess,
   findUserMediaUrls,
   findUsersForAdmin,
@@ -39,12 +40,18 @@ import {
   insertBannedWord,
 } from "@/server/repositories/banned-word.repository";
 import { clearBannedTermsCache } from "@/server/services/banned-word.service";
-import { findTicketsForAdmin, findTicketsForBoard, updateTicket as updateTicketRow } from "@/server/repositories/ticket.repository";
+import {
+  findTicketsForAdmin,
+  findTicketsForBoard,
+  replaceTicketAssignees,
+  updateTicket as updateTicketRow,
+} from "@/server/repositories/ticket.repository";
 import type { TicketPriority, TicketStatus } from "@/schemas/ticket.schema";
 import {
   deleteDevTicket,
   findDevTickets,
   insertDevTicket,
+  replaceDevTicketAssignees,
   updateDevTicket as updateDevTicketRow,
 } from "@/server/repositories/dev-ticket.repository";
 import type { CreateDevTicketInput, UpdateDevTicketInput } from "@/schemas/dev-ticket.schema";
@@ -308,17 +315,59 @@ export async function listTickets({ status, page }: { status: TicketStatus | "al
   return { tickets, total, page, pageSize: PAGE_SIZE };
 }
 
-// L'état est vu par l'auteur du ticket ; la priorité reste interne à l'administration.
-export async function updateTicket(adminId: string, ticketId: number, changes: { status?: TicketStatus; priority?: TicketPriority }) {
-  const updated = await updateTicketRow(ticketId, changes);
-  if (!updated) throw new AdminError("NOT_FOUND");
-  const { previous } = updated;
-  if (changes.status && changes.status !== previous.status) {
-    await log(adminId, "ticket.status", "ticket", ticketId, { from: previous.status, to: changes.status });
+// L'état est vu par l'auteur du ticket ; la priorité et les assignés restent internes à l'administration.
+export async function updateTicket(
+  adminId: string,
+  ticketId: number,
+  { assigneeIds, ...changes }: { status?: TicketStatus; priority?: TicketPriority; assigneeIds?: string[] },
+) {
+  const usernames = assigneeIds ? await checkAssignees(assigneeIds) : null;
+  // Sans état ni priorité, la ligne n'est pas touchée (updated_at, vu par l'auteur, inchangé).
+  if (changes.status || changes.priority) {
+    const updated = await updateTicketRow(ticketId, changes);
+    if (!updated) throw new AdminError("NOT_FOUND");
+    const { previous } = updated;
+    if (changes.status && changes.status !== previous.status) {
+      await log(adminId, "ticket.status", "ticket", ticketId, { from: previous.status, to: changes.status });
+    }
+    if (changes.priority && changes.priority !== previous.priority) {
+      await log(adminId, "ticket.priority", "ticket", ticketId, { from: previous.priority, to: changes.priority });
+    }
   }
-  if (changes.priority && changes.priority !== previous.priority) {
-    await log(adminId, "ticket.priority", "ticket", ticketId, { from: previous.priority, to: changes.priority });
+  if (assigneeIds && usernames) {
+    const replaced = await replaceTicketAssignees(ticketId, assigneeIds);
+    if (!replaced) throw new AdminError("NOT_FOUND");
+    await logAssignees(adminId, "ticket.assignees", "ticket", ticketId, replaced.previous, assigneeIds, usernames);
   }
+}
+
+// Admins assignables (Kanban) : admins actifs, sans email.
+export async function listAssignees() {
+  return { admins: await findActiveAdmins() };
+}
+
+// Seuls des admins actifs : un id inconnu ou d'un autre rôle est refusé. Renvoie leurs pseudos (journal).
+async function checkAssignees(ids: string[]) {
+  const usernames = new Map((await findActiveAdmins()).map((admin) => [admin.id, admin.username]));
+  if (ids.some((id) => !usernames.has(id))) throw new AdminError("INVALID_INPUT");
+  return usernames;
+}
+
+async function logAssignees(
+  adminId: string,
+  action: string,
+  targetType: AdminActionTarget,
+  ticketId: number,
+  previous: string[],
+  next: string[],
+  usernames: Map<string, string>,
+) {
+  const added = next.filter((id) => !previous.includes(id));
+  const removed = previous.filter((id) => !next.includes(id));
+  if (added.length === 0 && removed.length === 0) return;
+  // Ancien admin retiré : plus dans la liste des pseudos, son id suffit au journal.
+  const name = (id: string) => usernames.get(id) ?? id;
+  await log(adminId, action, targetType, ticketId, { added: added.map(name), removed: removed.map(name) });
 }
 
 // Kanban : colonne « clôturé » limitée aux plus récents ; plafond des tickets à traiter (taille de la réponse).
@@ -340,15 +389,23 @@ export async function createDevTicket(adminId: string, input: CreateDevTicketInp
   return { id };
 }
 
-export async function updateDevTicket(adminId: string, id: number, input: UpdateDevTicketInput) {
-  const updated = await updateDevTicketRow(id, input);
-  if (!updated) throw new AdminError("NOT_FOUND");
-  const moved = input.status !== undefined && input.status !== updated.previous.status;
-  await log(adminId, "dev_ticket.update", "dev_ticket", id, {
-    title: input.title ?? updated.previous.title,
-    fields: Object.keys(input),
-    ...(moved ? { from: updated.previous.status, to: input.status } : {}),
-  });
+export async function updateDevTicket(adminId: string, id: number, { assigneeIds, ...input }: UpdateDevTicketInput) {
+  const usernames = assigneeIds ? await checkAssignees(assigneeIds) : null;
+  if (Object.keys(input).length > 0) {
+    const updated = await updateDevTicketRow(id, input);
+    if (!updated) throw new AdminError("NOT_FOUND");
+    const moved = input.status !== undefined && input.status !== updated.previous.status;
+    await log(adminId, "dev_ticket.update", "dev_ticket", id, {
+      title: input.title ?? updated.previous.title,
+      fields: Object.keys(input),
+      ...(moved ? { from: updated.previous.status, to: input.status } : {}),
+    });
+  }
+  if (assigneeIds && usernames) {
+    const replaced = await replaceDevTicketAssignees(id, assigneeIds);
+    if (!replaced) throw new AdminError("NOT_FOUND");
+    await logAssignees(adminId, "dev_ticket.assignees", "dev_ticket", id, replaced.previous, assigneeIds, usernames);
+  }
 }
 
 export async function removeDevTicket(adminId: string, id: number) {

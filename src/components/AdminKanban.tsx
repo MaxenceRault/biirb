@@ -1,18 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { useFormatter, useTranslations } from "next-intl";
+import { useDismiss } from "@/client/hooks/useDismiss";
+import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { BOARD_COLUMNS, DEV_TICKET_DESCRIPTION_MAX, DEV_TICKET_TITLE_MAX, DEV_TICKET_TITLE_MIN, type BoardColumn } from "@/schemas/dev-ticket.schema";
-import { TICKET_PRIORITIES, type TicketCategory, type TicketPriority, type TicketStatus } from "@/schemas/ticket.schema";
+import {
+  TICKET_MAX_ASSIGNEES,
+  TICKET_PRIORITIES,
+  type TicketCategory,
+  type TicketPriority,
+  type TicketStatus,
+} from "@/schemas/ticket.schema";
 
 // Appel de l'API d'administration (AdminView) : null en cas d'erreur, déjà affichée.
 type Call = <T>(path: string, init?: { method?: string; body?: unknown }) => Promise<T | null>;
+
+// Admin assignable à un ticket (GET /admin/assignees) : jamais d'email.
+type Assignee = {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  avatar_seed: string | null;
+  avatar_background_color: string | null;
+};
 
 type SupportTicket = {
   id: number;
@@ -23,6 +42,7 @@ type SupportTicket = {
   category: TicketCategory;
   created_at: string;
   author: { username: string; display_name: string };
+  assignees: Assignee[];
 };
 
 type DevTicket = {
@@ -33,6 +53,7 @@ type DevTicket = {
   priority: TicketPriority;
   created_at: string;
   author: { username: string; display_name: string } | null;
+  assignees: Assignee[];
 };
 
 // Tickets de support rangés dans les colonnes du Kanban (l'état est aussi celui que voit l'utilisateur).
@@ -42,30 +63,88 @@ const SUPPORT_STATUS: Record<BoardColumn, TicketStatus> = { todo: "open", in_pro
 const BOARDS = ["support", "dev"] as const;
 type Board = (typeof BOARDS)[number];
 
-export function AdminKanban({ call }: { call: Call }) {
+// Filtre des cartes, commun aux deux tableaux. « mine » : l'admin connecté est assigné.
+const FILTERS = ["all", "mine", "unassigned"] as const;
+type Filter = (typeof FILTERS)[number];
+
+// currentUserId : profil de la session (affichage seulement, les droits sont vérifiés par l'API).
+export function AdminKanban({ call, currentUserId }: { call: Call; currentUserId: string | null }) {
   const t = useTranslations("Admin.kanban");
   const [board, setBoard] = useState<Board>("support");
+  const [filter, setFilter] = useState<Filter>("all");
+  // Chargés une fois pour les deux tableaux ; null : sélecteur masqué (erreur déjà affichée).
+  const [admins, setAdmins] = useState<Assignee[] | null>(null);
+  useEffect(() => {
+    call<{ admins: Assignee[] }>("/assignees").then((result) => {
+      if (result) setAdmins(result.admins);
+    });
+  }, [call]);
 
   return (
     <div className="flex flex-col gap-4">
-      <div role="group" aria-label={t("switchLabel")} className="flex gap-1 self-start rounded-lg bg-surface-muted p-1">
-        {BOARDS.map((value) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={board === value}
-            onClick={() => setBoard(value)}
-            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 font-display text-label-lg transition focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:outline-none ${
-              board === value ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink"
-            }`}
-          >
-            <Icon name={value === "support" ? "help" : "settings"} className="size-4.5" />
-            {t(`boards.${value}`)}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Segmented label={t("switchLabel")} options={BOARDS} value={board} onChange={setBoard}>
+          {(value) => (
+            <>
+              <Icon name={value === "support" ? "help" : "settings"} className="size-4.5" />
+              {t(`boards.${value}`)}
+            </>
+          )}
+        </Segmented>
+        <Segmented
+          label={t("filterLabel")}
+          options={currentUserId ? FILTERS : FILTERS.filter((value) => value !== "mine")}
+          value={filter}
+          onChange={setFilter}
+        >
+          {(value) => t(`filters.${value}`)}
+        </Segmented>
       </div>
       <p className="text-body-sm text-ink-soft">{t(`hints.${board}`)}</p>
-      {board === "support" ? <SupportBoard call={call} /> : <DevBoard call={call} />}
+      {board === "support" ? (
+        <SupportBoard call={call} admins={admins} visible={(ticket) => matchesFilter(ticket, filter, currentUserId)} />
+      ) : (
+        <DevBoard call={call} admins={admins} visible={(ticket) => matchesFilter(ticket, filter, currentUserId)} />
+      )}
+    </div>
+  );
+}
+
+function matchesFilter(ticket: { assignees: Assignee[] }, filter: Filter, currentUserId: string | null) {
+  if (filter === "mine") return ticket.assignees.some((assignee) => assignee.id === currentUserId);
+  if (filter === "unassigned") return ticket.assignees.length === 0;
+  return true;
+}
+
+// Boutons à bascule, un seul actif : choix du tableau et filtre des cartes.
+function Segmented<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  options: readonly T[];
+  value: T;
+  onChange: (value: T) => void;
+  children: (value: T) => ReactNode;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex gap-1 rounded-lg bg-surface-muted p-1">
+      {options.map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={value === option}
+          onClick={() => onChange(option)}
+          className={`flex items-center gap-1.5 rounded-lg px-4 py-2 font-display text-label-lg transition focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:outline-none ${
+            value === option ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink"
+          }`}
+        >
+          {children(option)}
+        </button>
+      ))}
     </div>
   );
 }
@@ -81,7 +160,20 @@ function useBoard<T extends { id: number }>(call: Call, path: string) {
   return { tickets, setTickets, reload };
 }
 
-function SupportBoard({ call }: { call: Call }) {
+type BoardProps = { call: Call; admins: Assignee[] | null; visible: (ticket: { assignees: Assignee[] }) => boolean };
+
+// Nouvelle liste d'assignés affichée tout de suite : ceux déjà là gardent leur place, les ajoutés viennent de la liste des admins.
+function withAssignees<T extends { id: number; assignees: Assignee[] }>(tickets: T[] | null, id: number, ids: string[], admins: Assignee[] | null) {
+  return (
+    tickets?.map((ticket) => {
+      if (ticket.id !== id) return ticket;
+      const known = [...ticket.assignees, ...(admins ?? [])];
+      return { ...ticket, assignees: ids.map((value) => known.find((admin) => admin.id === value)).filter((admin) => admin !== undefined) };
+    }) ?? null
+  );
+}
+
+function SupportBoard({ call, admins, visible }: BoardProps) {
   const t = useTranslations("Admin");
   const format = useFormatter();
   const { tickets, setTickets, reload } = useBoard<SupportTicket>(call, "/tickets/board");
@@ -98,11 +190,16 @@ function SupportBoard({ call }: { call: Call }) {
     if ((await call(`/tickets/${id}`, { method: "PATCH", body: { priority } })) === null) reload();
   }
 
+  async function assign(id: number, assigneeIds: string[]) {
+    setTickets((current) => withAssignees(current, id, assigneeIds, admins));
+    if ((await call(`/tickets/${id}`, { method: "PATCH", body: { assigneeIds } })) === null) reload();
+  }
+
   if (!tickets) return <Card className="h-96 animate-pulse bg-surface-muted" aria-hidden="true" />;
 
   return (
     <KanbanColumns
-      items={tickets.map((ticket) => ({ id: ticket.id, column: SUPPORT_COLUMN[ticket.status] }))}
+      items={tickets.filter(visible).map((ticket) => ({ id: ticket.id, column: SUPPORT_COLUMN[ticket.status] }))}
       onMove={move}
       renderCard={(id) => {
         const ticket = tickets.find((item) => item.id === id)!;
@@ -119,6 +216,7 @@ function SupportBoard({ call }: { call: Call }) {
               {format.dateTime(new Date(ticket.created_at), { dateStyle: "short" })}
             </p>
             <PriorityPicker value={ticket.priority} onChange={(priority) => void prioritize(ticket.id, priority)} name={`support-${ticket.id}`} />
+            <AssigneePicker assignees={ticket.assignees} admins={admins} onChange={(ids) => void assign(ticket.id, ids)} />
           </>
         );
       }}
@@ -127,7 +225,7 @@ function SupportBoard({ call }: { call: Call }) {
   );
 }
 
-function DevBoard({ call }: { call: Call }) {
+function DevBoard({ call, admins, visible }: BoardProps) {
   const t = useTranslations("Admin.kanban");
   const format = useFormatter();
   const { tickets, setTickets, reload } = useBoard<DevTicket>(call, "/dev-tickets");
@@ -141,6 +239,11 @@ function DevBoard({ call }: { call: Call }) {
   async function prioritize(id: number, priority: TicketPriority) {
     setTickets((current) => sortByPriority(current?.map((ticket) => (ticket.id === id ? { ...ticket, priority } : ticket)) ?? []));
     if ((await call(`/dev-tickets/${id}`, { method: "PATCH", body: { priority } })) === null) reload();
+  }
+
+  async function assign(id: number, assigneeIds: string[]) {
+    setTickets((current) => withAssignees(current, id, assigneeIds, admins));
+    if ((await call(`/dev-tickets/${id}`, { method: "PATCH", body: { assigneeIds } })) === null) reload();
   }
 
   async function create(values: TicketFormValues) {
@@ -172,7 +275,7 @@ function DevBoard({ call }: { call: Call }) {
         <Card className="h-96 animate-pulse bg-surface-muted" aria-hidden="true" />
       ) : (
         <KanbanColumns
-          items={tickets.map((ticket) => ({ id: ticket.id, column: ticket.status }))}
+          items={tickets.filter(visible).map((ticket) => ({ id: ticket.id, column: ticket.status }))}
           onMove={move}
           cardLabel={(id) => tickets.find((item) => item.id === id)!.title}
           renderCard={(id) => {
@@ -197,6 +300,7 @@ function DevBoard({ call }: { call: Call }) {
                   {format.dateTime(new Date(ticket.created_at), { dateStyle: "short" })}
                 </p>
                 <PriorityPicker value={ticket.priority} onChange={(priority) => void prioritize(ticket.id, priority)} name={`dev-${ticket.id}`} />
+                <AssigneePicker assignees={ticket.assignees} admins={admins} onChange={(ids) => void assign(ticket.id, ids)} />
                 <div className="flex gap-1">
                   <Button size="sm" variant="secondary" onClick={() => setEditing(ticket.id)} className="gap-1">
                     <Icon name="edit" className="size-3.5" />
@@ -419,6 +523,71 @@ function PriorityPicker({ value, onChange, name }: { value: TicketPriority; onCh
           {t(`priorities.${priority}`)}
         </label>
       ))}
+    </div>
+  );
+}
+
+// Assignés d'une carte : avatars empilés, et liste des admins à cocher (dans la carte : une colonne qui défile couperait un menu flottant).
+function AssigneePicker({ assignees, admins, onChange }: { assignees: Assignee[]; admins: Assignee[] | null; onChange: (ids: string[]) => void }) {
+  const t = useTranslations("Admin.kanban");
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(root, open, close);
+  const ids = assignees.map((assignee) => assignee.id);
+  const full = ids.length >= TICKET_MAX_ASSIGNEES;
+
+  function toggle(id: string) {
+    onChange(ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]);
+  }
+
+  return (
+    <div ref={root} className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        {assignees.length > 0 ? (
+          <ul aria-label={t("assigneesLabel")} className="flex -space-x-1.5">
+            {assignees.map((assignee) => (
+              <li key={assignee.id} title={assignee.display_name} className="rounded-lg ring-2 ring-surface">
+                <Avatar
+                  src={assignee.avatar_url}
+                  name={assignee.avatar_seed ?? assignee.id}
+                  backgroundColor={assignee.avatar_background_color}
+                  alt={assignee.display_name}
+                  size={24}
+                />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <span className="text-label-sm text-ink-soft">{t("unassigned")}</span>
+        )}
+        {admins && (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((value) => !value)}
+            className="flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-label-sm text-accent transition hover:bg-accent/10 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none"
+          >
+            <Icon name={open ? "check" : "group"} className="size-3.5" />
+            {open ? t("assignDone") : t("assign")}
+          </button>
+        )}
+      </div>
+      {open && admins && (
+        <fieldset className="flex flex-col gap-1.5 rounded-lg bg-surface-muted p-2">
+          <legend className="sr-only">{t("assigneesLabel")}</legend>
+          {admins.map((admin) => {
+            const checked = ids.includes(admin.id);
+            return (
+              <Checkbox key={admin.id} checked={checked} disabled={!checked && full} onChange={() => toggle(admin.id)}>
+                <Avatar src={admin.avatar_url} name={admin.avatar_seed ?? admin.id} backgroundColor={admin.avatar_background_color} alt="" size={20} />
+                <span className="truncate text-body-sm text-ink">{admin.display_name}</span>
+              </Checkbox>
+            );
+          })}
+          {full && <p className="text-label-sm text-ink-soft">{t("assigneesMax", { max: TICKET_MAX_ASSIGNEES })}</p>}
+        </fieldset>
+      )}
     </div>
   );
 }
