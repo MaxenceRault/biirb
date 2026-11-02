@@ -61,6 +61,29 @@ export async function findTicketsForAdmin(
   return { tickets: list.rows, total: count.rows[0].total };
 }
 
+// Kanban : tous les tickets à traiter, et les derniers clôturés seulement (la colonne ne grossit pas sans fin).
+export async function findTicketsForBoard(closedLimit: number, openLimit: number): Promise<AdminTicketRow[]> {
+  const db = await getDb();
+  const { rows } = await db.query<AdminTicketRow>(
+    `(select ${COLUMNS},
+        json_build_object('id', u.id, 'username', u.username, 'display_name', u.display_name) as author
+      from support_ticket t join users u on u.id = t.user_id
+      where t.status <> 'closed'
+      -- Les plus anciens d'abord : à traiter en premier.
+      order by t.created_at
+      limit $2)
+     union all
+     (select ${COLUMNS},
+        json_build_object('id', u.id, 'username', u.username, 'display_name', u.display_name) as author
+      from support_ticket t join users u on u.id = t.user_id
+      where t.status = 'closed'
+      order by t.updated_at desc
+      limit $1)`,
+    [closedLimit, openLimit],
+  );
+  return rows;
+}
+
 // null : ticket inconnu. previous : état avant le changement (journal).
 export async function updateTicketStatus(
   id: number,

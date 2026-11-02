@@ -37,7 +37,7 @@ export async function findRecentUsers(limit: number): Promise<RecentUserRow[]> {
   return rows;
 }
 
-export type AdminActionTarget = "user" | "post" | "archetype" | "settings" | "ticket" | "trip";
+export type AdminActionTarget = "user" | "post" | "archetype" | "settings" | "ticket" | "trip" | "dev_ticket";
 
 export type NewAdminAction = {
   admin_id: string;

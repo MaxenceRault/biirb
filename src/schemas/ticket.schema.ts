@@ -6,7 +6,8 @@ export const TICKET_SUBJECT_MAX = 120;
 export const TICKET_MESSAGE_MIN = 10;
 export const TICKET_MESSAGE_MAX = 2000;
 
-export const TICKET_STATUSES = ["open", "in_progress", "resolved"] as const;
+// closed : clôturé par un admin (Kanban), plus rien à faire.
+export const TICKET_STATUSES = ["open", "in_progress", "resolved", "closed"] as const;
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
 
 // trip_pass : paiement ou activation du pass voyage, les admins sont prévenus par email.

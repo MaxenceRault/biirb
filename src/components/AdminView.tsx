@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { useFormatter, useNow, useTranslations } from "next-intl";
+import { AdminKanban } from "@/components/AdminKanban";
 import { RoleBadge } from "@/components/RoleBadge";
-import { TicketStatusBadge } from "@/components/TicketStatusBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,6 @@ import { Icon, type IconName } from "@/components/ui/Icon";
 import { FIELD_CLASS_NAME, Input } from "@/components/ui/Input";
 import { USER_ROLES, type UserRole } from "@/lib/roles";
 import { apiFetch, getSessionSnapshot, parseSessionUser, subscribeSession, type ApiResult } from "@/client/session";
-import { TICKET_STATUSES, type TicketCategory, type TicketStatus } from "@/schemas/ticket.schema";
 
 type Dashboard = {
   counts: {
@@ -76,17 +75,6 @@ type AdminArchetype = {
   description: string | null;
   is_active: boolean;
   post_count: number;
-};
-
-type AdminTicket = {
-  id: number;
-  subject: string;
-  message: string;
-  status: TicketStatus;
-  category: TicketCategory;
-  created_at: string;
-  updated_at: string;
-  author: { id: string; username: string; display_name: string };
 };
 
 type Settings = { ai_enabled: boolean; ai_daily_cap: number; updated_at: string };
@@ -249,7 +237,7 @@ export function AdminView() {
       <div role="tabpanel">
         {tab === "dashboard" && <DashboardTab call={call} onOpen={setTab} />}
         {tab === "reports" && <ReportsTab call={call} />}
-        {tab === "tickets" && <TicketsTab call={call} />}
+        {tab === "tickets" && <AdminKanban call={call} />}
         {tab === "posts" && <PostsTab call={call} />}
         {tab === "users" && <UsersTab call={call} currentUserId={currentUserId} />}
         {tab === "tripPasses" && <TripPassesTab call={call} />}
@@ -447,87 +435,6 @@ function ReportsTab({ call }: { call: Call }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-function TicketsTab({ call }: { call: Call }) {
-  const t = useTranslations("Admin");
-  const statusLabel = useTranslations("TicketStatus");
-  const format = useFormatter();
-  const [query, setQuery] = useState<{ status: TicketStatus | "all"; page: number }>({ status: "open", page: 1 });
-  const params = new URLSearchParams({ status: query.status, page: String(query.page) });
-  const { data, reload } = useResource<Paged<"tickets", AdminTicket>>(call, `/tickets?${params}`);
-
-  async function setStatus(id: number, status: TicketStatus) {
-    if ((await call(`/tickets/${id}`, { method: "PATCH", body: { status } })) !== null) reload();
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      <select
-        aria-label={t("tickets.filterLabel")}
-        value={query.status}
-        onChange={(event) => setQuery({ status: event.target.value as TicketStatus | "all", page: 1 })}
-        className={`h-11 sm:w-56 ${FIELD_CLASS_NAME}`}
-      >
-        {(["all", ...TICKET_STATUSES] as const).map((value) => (
-          <option key={value} value={value}>
-            {t(`tickets.filter.${value}`)}
-          </option>
-        ))}
-      </select>
-
-      {!data ? (
-        <Skeleton />
-      ) : data.tickets.length === 0 ? (
-        <Empty>{t("tickets.empty")}</Empty>
-      ) : (
-        <>
-          <ul className="flex flex-col gap-3">
-            {data.tickets.map((ticket) => (
-              <li key={ticket.id}>
-                <Card className="flex flex-col gap-3 p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex min-w-0 flex-col gap-1">
-                      <p className="font-display text-label-lg text-ink">
-                        <span className="text-ink-soft">#{ticket.id}</span> {ticket.subject}
-                      </p>
-                      <span className="text-body-sm text-ink-soft">
-                        {t("byAuthor", { name: ticket.author.display_name, username: ticket.author.username })} ·{" "}
-                        {format.dateTime(new Date(ticket.created_at), { dateStyle: "medium", timeStyle: "short" })}
-                      </span>
-                    </div>
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <Badge tone={ticket.category === "trip_pass" ? "accent" : "neutral"}>{t(`tickets.categories.${ticket.category}`)}</Badge>
-                      <TicketStatusBadge status={ticket.status} />
-                    </span>
-                  </div>
-                  <p className="rounded-lg bg-surface-muted px-3 py-2 text-body-sm whitespace-pre-line text-ink">{ticket.message}</p>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <label htmlFor={`ticket-status-${ticket.id}`} className="text-body-sm text-ink-soft">
-                      {t("tickets.statusLabel")}
-                    </label>
-                    <select
-                      id={`ticket-status-${ticket.id}`}
-                      value={ticket.status}
-                      onChange={(event) => setStatus(ticket.id, event.target.value as TicketStatus)}
-                      className={`h-9 sm:w-44 ${FIELD_CLASS_NAME}`}
-                    >
-                      {TICKET_STATUSES.map((value) => (
-                        <option key={value} value={value}>
-                          {statusLabel(value)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </Card>
-              </li>
-            ))}
-          </ul>
-          <Pagination total={data.total} page={data.page} pageSize={data.pageSize} onPage={(page) => setQuery((current) => ({ ...current, page }))} />
-        </>
-      )}
-    </div>
   );
 }
 

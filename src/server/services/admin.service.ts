@@ -39,8 +39,15 @@ import {
   insertBannedWord,
 } from "@/server/repositories/banned-word.repository";
 import { clearBannedTermsCache } from "@/server/services/banned-word.service";
-import { findTicketsForAdmin, updateTicketStatus } from "@/server/repositories/ticket.repository";
+import { findTicketsForAdmin, findTicketsForBoard, updateTicketStatus } from "@/server/repositories/ticket.repository";
 import type { TicketStatus } from "@/schemas/ticket.schema";
+import {
+  deleteDevTicket,
+  findDevTickets,
+  insertDevTicket,
+  updateDevTicket as updateDevTicketRow,
+} from "@/server/repositories/dev-ticket.repository";
+import type { CreateDevTicketInput, UpdateDevTicketInput } from "@/schemas/dev-ticket.schema";
 import { getBuyMeACoffeeConfig } from "@/server/config";
 import { findTripInternalId } from "@/server/repositories/trip.repository";
 import {
@@ -305,6 +312,42 @@ export async function setTicketStatus(adminId: string, ticketId: number, status:
   const updated = await updateTicketStatus(ticketId, status);
   if (!updated) throw new AdminError("NOT_FOUND");
   if (updated.previous !== status) await log(adminId, "ticket.status", "ticket", ticketId, { from: updated.previous, to: status });
+}
+
+// Kanban : colonne « clôturé » limitée aux plus récents ; plafond des tickets à traiter (taille de la réponse).
+const BOARD_CLOSED_LIMIT = 30;
+const BOARD_OPEN_LIMIT = 300;
+
+export async function getSupportBoard() {
+  return { tickets: await findTicketsForBoard(BOARD_CLOSED_LIMIT, BOARD_OPEN_LIMIT) };
+}
+
+// Tickets de développement : écrits par les admins, visibles d'eux seuls.
+export async function listDevTickets() {
+  return { tickets: await findDevTickets(BOARD_CLOSED_LIMIT, BOARD_OPEN_LIMIT) };
+}
+
+export async function createDevTicket(adminId: string, input: CreateDevTicketInput) {
+  const id = await insertDevTicket(adminId, { title: input.title, description: input.description ?? null, priority: input.priority });
+  await log(adminId, "dev_ticket.create", "dev_ticket", id, { title: input.title });
+  return { id };
+}
+
+export async function updateDevTicket(adminId: string, id: number, input: UpdateDevTicketInput) {
+  const updated = await updateDevTicketRow(id, input);
+  if (!updated) throw new AdminError("NOT_FOUND");
+  const moved = input.status !== undefined && input.status !== updated.previous.status;
+  await log(adminId, "dev_ticket.update", "dev_ticket", id, {
+    title: input.title ?? updated.previous.title,
+    fields: Object.keys(input),
+    ...(moved ? { from: updated.previous.status, to: input.status } : {}),
+  });
+}
+
+export async function removeDevTicket(adminId: string, id: number) {
+  const title = await deleteDevTicket(id);
+  if (title === null) throw new AdminError("NOT_FOUND");
+  await log(adminId, "dev_ticket.delete", "dev_ticket", id, { title });
 }
 
 const TRIP_PASSES_LIMIT = 100;

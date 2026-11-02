@@ -34,6 +34,7 @@ import {
 import { createArchetypeSchema, updateArchetypeSchema } from "@/schemas/archetype.schema";
 import { createCommentSchema } from "@/schemas/comment.schema";
 import { adminUpdateTicketSchema, createTicketSchema, TICKET_STATUSES } from "@/schemas/ticket.schema";
+import { createDevTicketSchema, updateDevTicketSchema } from "@/schemas/dev-ticket.schema";
 import { displayedBadgeSchema, profileImageSchema, updateProfileSchema } from "@/schemas/user.schema";
 import { USER_ROLES } from "@/lib/roles";
 
@@ -1159,6 +1160,32 @@ export function buildOpenApiDocument() {
       },
       "/admin/tickets/{id}": {
         patch: adminRoute("Changer l'état d'un ticket", { params: [numericIdParam("id")], body: adminUpdateTicketSchema, ok: noContent, description: "Inscrit au journal (état avant / après)." }),
+      },
+      "/admin/tickets/board": {
+        get: adminRoute("Kanban du support", {
+          description:
+            "Tous les tickets non clôturés (300 au plus, plus anciens d'abord) et les 30 derniers clôturés. Colonnes : open → À faire, " +
+            "in_progress → En cours, resolved → Fait, closed → Clôturé ; déplacer un ticket = PATCH /admin/tickets/{id} (état vu par l'utilisateur).",
+        }),
+      },
+      "/admin/dev-tickets": {
+        get: adminRoute("Kanban du développement", {
+          description: "Tickets internes de l'équipe : tous les non clôturés (priorité haute d'abord) et les 30 derniers clôturés. Visibles des admins seulement.",
+        }),
+        post: adminRoute("Créer un ticket de développement", {
+          body: createDevTicketSchema,
+          ok: { 201: json("Créé", { type: "object", properties: { id: { type: "integer" } } }) },
+          description: "Créé dans la colonne « À faire ». Inscrit au journal.",
+        }),
+      },
+      "/admin/dev-tickets/{id}": {
+        patch: adminRoute("Modifier ou déplacer un ticket de développement", {
+          params: [numericIdParam("id")],
+          body: updateDevTicketSchema,
+          ok: noContent,
+          description: "status : todo, in_progress, done ou closed. Inscrit au journal.",
+        }),
+        delete: adminRoute("Supprimer un ticket de développement", { params: [numericIdParam("id")], ok: noContent, description: "Inscrit au journal." }),
       },
       "/admin/trip-passes": {
         get: adminRoute("Pass voyage : achats à rattacher et pass actifs", {

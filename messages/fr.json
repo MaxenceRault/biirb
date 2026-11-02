@@ -819,7 +819,7 @@
     "tabs": {
       "dashboard": "Tableau de bord",
       "reports": "Signalements",
-      "tickets": "Tickets",
+      "tickets": "Kanban",
       "posts": "Récits",
       "users": "Utilisateurs",
       "archetypes": "Types de récit",
@@ -939,7 +939,10 @@
         "trip_pass_gift": "Pass voyage offert",
         "trip_pass_assign": "Achat de pass rattaché",
         "trip_pass_revoke": "Pass voyage retiré",
-        "ticket_status": "État d'un ticket modifié"
+        "ticket_status": "État d'un ticket modifié",
+        "dev_ticket_create": "Ticket de développement créé",
+        "dev_ticket_update": "Ticket de développement modifié",
+        "dev_ticket_delete": "Ticket de développement supprimé"
       },
       "targets": {
         "user": "Utilisateur",
@@ -947,7 +950,8 @@
         "archetype": "Type de récit",
         "settings": "Réglages",
         "ticket": "Ticket",
-        "trip": "Voyage"
+        "trip": "Voyage",
+        "dev_ticket": "Ticket de développement"
       }
     },
     "errors": {
@@ -990,15 +994,6 @@
       "hide": "Masquer la liste"
     },
     "tickets": {
-      "empty": "Aucun ticket dans cet état.",
-      "filterLabel": "Filtrer par état",
-      "statusLabel": "État",
-      "filter": {
-        "all": "Tous les tickets",
-        "open": "Ouverts",
-        "in_progress": "En cours",
-        "resolved": "Résolus"
-      },
       "categories": {
         "trip_pass": "Pass voyage",
         "bug": "Bug",
@@ -1030,6 +1025,47 @@
       "trip": "{title} · @{owner} · {id}",
       "done": "Pass attribué.",
       "tripIdPlaceholder": "ex. 3f2b…-…"
+    },
+    "kanban": {
+      "switchLabel": "Tableau affiché",
+      "boards": {
+        "support": "Support",
+        "dev": "Développement"
+      },
+      "hints": {
+        "support": "Tickets envoyés par les utilisateurs. Déplacer un ticket change aussi l'état qu'ils voient sur leur page Support.",
+        "dev": "Vos tickets internes pour améliorer Biirb : visibles des admins seulement."
+      },
+      "columns": {
+        "todo": "À faire",
+        "in_progress": "En cours",
+        "done": "Fait",
+        "closed": "Clôturé"
+      },
+      "emptyColumn": "Aucun ticket",
+      "moveLabel": "Déplacer « {title} »",
+      "moveTo": "Déplacer vers « {column} »",
+      "currentColumn": "Colonne : {column}",
+      "more": "Voir plus",
+      "less": "Voir moins",
+      "newTitle": "Nouveau ticket de développement",
+      "titleLabel": "Titre",
+      "titlePlaceholder": "Ex. Ajouter un filtre par budget dans le planificateur",
+      "priorityLabel": "Priorité",
+      "priorities": {
+        "low": "Basse",
+        "medium": "Moyenne",
+        "high": "Haute"
+      },
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Détails, contexte, idée de solution… (facultatif)",
+      "add": "Ajouter",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "deleteConfirm": "Supprimer le ticket « {title} » ?",
+      "deletedAuthor": "Admin supprimé"
     }
   },
   "TripExport": {
@@ -1091,7 +1127,8 @@
   "TicketStatus": {
     "open": "Ouvert",
     "in_progress": "En cours",
-    "resolved": "Résolu"
+    "resolved": "Résolu",
+    "closed": "Clôturé"
   },
   "Support": {
     "metaTitle": "Support",
