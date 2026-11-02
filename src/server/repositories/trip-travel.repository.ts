@@ -63,6 +63,30 @@ export async function findTravelLegs(keys: LegKey[], profile: TravelProfile): Pr
   }));
 }
 
+// Trajet déjà calculé entre deux activités du voyage (lecture seule, jamais d'appel externe) : null si l'une n'a pas de
+// lieu connu. Même arrondi que les clés de travel_leg ; même point : 0 minute.
+export async function findCachedTravelBetween(
+  tripId: number,
+  fromItemId: number,
+  toItemId: number,
+): Promise<{ walkSeconds: number | null; driveSeconds: number | null } | null> {
+  const db = await getDb();
+  const point = (alias: string, prefix: string) =>
+    `l.${prefix}_latitude = round(${alias}.latitude::numeric, 4) and l.${prefix}_longitude = round(${alias}.longitude::numeric, 4)`;
+  const leg = (profileParam: string) =>
+    `(select l.duration_seconds from travel_leg l where ${point("a", "from")} and ${point("b", "to")} and l.profile = ${profileParam}::travel_profile)`;
+  const { rows } = await db.query<{ same: boolean; walk: number | null; drive: number | null }>(
+    `select round(a.latitude::numeric, 4) = round(b.latitude::numeric, 4) and round(a.longitude::numeric, 4) = round(b.longitude::numeric, 4) as same,
+       ${leg("$4")} as walk, ${leg("$5")} as drive
+     from trip_item a join trip_item b on b.trip_id = a.trip_id
+     where a.trip_id = $1 and a.id = $2 and b.id = $3 and a.latitude is not null and b.latitude is not null`,
+    [tripId, fromItemId, toItemId, "foot-walking", "driving-car"],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return row.same ? { walkSeconds: 0, driveSeconds: null } : { walkSeconds: row.walk, driveSeconds: row.drive };
+}
+
 // Déjà présent (calculé entre-temps par une autre requête) : ignoré.
 export async function insertTravelLegs(legs: LegRow[], profile: TravelProfile) {
   if (legs.length === 0) return;
