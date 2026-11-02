@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { FormError } from "@/components/ui/FormError";
 import { Icon } from "@/components/ui/Icon";
 import { FIELD_CLASS_NAME, Input } from "@/components/ui/Input";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { apiFetch, getSessionSnapshot, parseSessionUser } from "@/client/session";
 
 const MEMBER_ROLES = ["editor", "viewer"] as const;
@@ -41,6 +42,7 @@ type ShareError = (typeof SHARE_ERRORS)[number];
 // Membres et invitations d'un voyage. Seul le propriétaire invite, change les rôles et retire des membres.
 export function TripSharePanel({ tripId }: { tripId: string }) {
   const t = useTranslations("Planner.share");
+  const confirm = useConfirm();
   const format = useFormatter();
   const router = useRouter();
   const me = parseSessionUser(getSessionSnapshot());
@@ -104,7 +106,24 @@ export function TripSharePanel({ tripId }: { tripId: string }) {
 
   async function remove(member: Member) {
     const leaving = member.user_id === me?.id;
-    if (!window.confirm(leaving ? t("leaveConfirm") : t("removeConfirm", { name: member.display_name }))) return;
+    const confirmed = await confirm(
+      leaving
+        ? {
+          title: t("leaveConfirm.title"),
+          message: t("leaveConfirm.message"),
+          confirmLabel: t("leaveConfirm.action"),
+          icon: "logout",
+          danger: true,
+        }
+        : {
+          title: t("removeConfirm.title", { name: member.display_name }),
+          message: t("removeConfirm.message"),
+          confirmLabel: t("removeConfirm.action"),
+          icon: "group",
+          danger: true,
+        },
+    );
+    if (!confirmed) return;
     setError(null);
     const result = await apiFetch(`${basePath}/members/${member.user_id}`, { method: "DELETE" });
     if (!("data" in result)) return fail(result.error);

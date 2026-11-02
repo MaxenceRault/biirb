@@ -15,6 +15,7 @@ import { Field } from "@/components/ui/Field";
 import { FormError } from "@/components/ui/FormError";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { FIELD_CLASS_NAME, Input } from "@/components/ui/Input";
+import { useConfirm, type ConfirmOptions } from "@/components/ui/ConfirmDialog";
 import { USER_ROLES, type UserRole } from "@/lib/roles";
 import { apiFetch, getSessionSnapshot, parseSessionUser, subscribeSession, type ApiResult } from "@/client/session";
 
@@ -363,11 +364,12 @@ function DashboardTab({ call, onOpen }: { call: Call; onOpen: (tab: Tab) => void
 
 function ReportsTab({ call }: { call: Call }) {
   const t = useTranslations("Admin");
+  const confirm = useConfirm();
   const format = useFormatter();
   const { data, reload } = useResource<{ reports: ReportedPost[] }>(call, "/reports");
 
-  async function act(path: string, method: string, body?: unknown, confirmMessage?: string) {
-    if (confirmMessage && !window.confirm(confirmMessage)) return;
+  async function act(path: string, method: string, body?: unknown, confirmation?: ConfirmOptions) {
+    if (confirmation && !(await confirm(confirmation))) return;
     if ((await call(path, { method, body })) !== null) reload();
   }
 
@@ -426,7 +428,13 @@ function ReportsTab({ call }: { call: Call }) {
                   {t("posts.hide")}
                 </Button>
               )}
-              <Button size="sm" onClick={() => act(`/posts/${report.post_id}`, "DELETE", undefined, t("posts.deleteConfirm", { title: report.title }))}>
+              <Button size="sm" onClick={() => act(`/posts/${report.post_id}`, "DELETE", undefined, {
+                title: t("posts.deleteConfirm.title", { title: report.title }),
+                message: t("posts.deleteConfirm.message"),
+                confirmLabel: t("posts.deleteConfirm.action"),
+                icon: "delete",
+                danger: true,
+              })}>
                 <Icon name="delete" className="size-4" />
                 {t("posts.delete")}
               </Button>
@@ -441,6 +449,7 @@ function ReportsTab({ call }: { call: Call }) {
 // Achats payés avec un autre email ou sans commande : rattachés après vérification de l'email déclaré par l'acheteur.
 function TripPassesTab({ call }: { call: Call }) {
   const t = useTranslations("Admin");
+  const confirm = useConfirm();
   const format = useFormatter();
   const { data, reload } = useResource<{ unassigned: UnassignedTripPass[]; active: ActiveTripPass[] }>(call, "/trip-passes");
   const [done, setDone] = useState(false);
@@ -466,12 +475,25 @@ function TripPassesTab({ call }: { call: Call }) {
     event.preventDefault();
     const form = event.currentTarget;
     const tripId = String(new FormData(form).get("tripId") ?? "").trim();
-    if (!window.confirm(t("tripPasses.giftConfirm", { id: tripId }))) return;
+    const confirmed = await confirm({
+      title: t("tripPasses.giftConfirm.title"),
+      message: t("tripPasses.giftConfirm.message", { id: tripId }),
+      confirmLabel: t("tripPasses.giftConfirm.action"),
+      icon: "sparkles",
+    });
+    if (!confirmed) return;
     if (await grant({ tripId })) form.reset();
   }
 
   async function revoke(pass: ActiveTripPass) {
-    if (!window.confirm(t("tripPasses.revokeConfirm", { title: pass.trip.title }))) return;
+    const confirmed = await confirm({
+      title: t("tripPasses.revokeConfirm.title", { title: pass.trip.title }),
+      message: t("tripPasses.revokeConfirm.message"),
+      confirmLabel: t("tripPasses.revokeConfirm.action"),
+      icon: "delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     if ((await call(`/trip-passes/${pass.id}`, { method: "DELETE" })) !== null) reload();
   }
 
@@ -567,13 +589,14 @@ function TripPassesTab({ call }: { call: Call }) {
 
 function PostsTab({ call }: { call: Call }) {
   const t = useTranslations("Admin");
+  const confirm = useConfirm();
   const format = useFormatter();
   const [query, setQuery] = useState({ q: "", visibility: "all", page: 1 });
   const params = new URLSearchParams({ visibility: query.visibility, page: String(query.page), ...(query.q ? { q: query.q } : {}) });
   const { data, reload } = useResource<Paged<"posts", AdminPost>>(call, `/posts?${params}`);
 
-  async function act(path: string, method: string, body?: unknown, confirmMessage?: string) {
-    if (confirmMessage && !window.confirm(confirmMessage)) return;
+  async function act(path: string, method: string, body?: unknown, confirmation?: ConfirmOptions) {
+    if (confirmation && !(await confirm(confirmation))) return;
     if ((await call(path, { method, body })) !== null) reload();
   }
 
@@ -630,7 +653,13 @@ function PostsTab({ call }: { call: Call }) {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => act(`/posts/${post.id}`, "DELETE", undefined, t("posts.deleteConfirm", { title: post.title }))}
+                    onClick={() => act(`/posts/${post.id}`, "DELETE", undefined, {
+                      title: t("posts.deleteConfirm.title", { title: post.title }),
+                      message: t("posts.deleteConfirm.message"),
+                      confirmLabel: t("posts.deleteConfirm.action"),
+                      icon: "delete",
+                      danger: true,
+                    })}
                     aria-label={t("posts.deleteLabel", { title: post.title })}
                   >
                     <Icon name="delete" className="size-4" />
@@ -649,14 +678,15 @@ function PostsTab({ call }: { call: Call }) {
 
 function UsersTab({ call, currentUserId }: { call: Call; currentUserId: string | null }) {
   const t = useTranslations("Admin");
+  const confirm = useConfirm();
   const tRoles = useTranslations("Roles");
   const format = useFormatter();
   const [query, setQuery] = useState({ q: "", page: 1 });
   const params = new URLSearchParams({ page: String(query.page), ...(query.q ? { q: query.q } : {}) });
   const { data, reload } = useResource<Paged<"users", AdminUser>>(call, `/users?${params}`);
 
-  async function act(path: string, method: string, body?: unknown, confirmMessage?: string) {
-    if (confirmMessage && !window.confirm(confirmMessage)) return;
+  async function act(path: string, method: string, body?: unknown, confirmation?: ConfirmOptions) {
+    if (confirmation && !(await confirm(confirmation))) return;
     if ((await call(path, { method, body })) !== null) reload();
   }
 
@@ -709,8 +739,13 @@ function UsersTab({ call, currentUserId }: { call: Call; currentUserId: string |
                           value={user.role}
                           onChange={(event) => {
                             const role = event.target.value as UserRole;
-                            const message = role === "admin" ? t("users.promoteConfirm", { name: user.display_name }) : undefined;
-                            void act(`/users/${user.id}`, "PATCH", { role }, message);
+                            const confirmation: ConfirmOptions | undefined = role === "admin" ? {
+                              title: t("users.promoteConfirm.title", { name: user.display_name }),
+                              message: t("users.promoteConfirm.message"),
+                              confirmLabel: t("users.promoteConfirm.action"),
+                              icon: "shield",
+                            } : undefined;
+                            void act(`/users/${user.id}`, "PATCH", { role }, confirmation);
                           }}
                           className={`h-9 ${FIELD_CLASS_NAME}`}
                         >
@@ -732,7 +767,13 @@ function UsersTab({ call, currentUserId }: { call: Call; currentUserId: string |
                                 `/users/${user.id}`,
                                 "PATCH",
                                 { banned: !user.banned_at },
-                                user.banned_at ? undefined : t("users.banConfirm", { name: user.display_name }),
+                                user.banned_at ? undefined : {
+                                  title: t("users.banConfirm.title", { name: user.display_name }),
+                                  message: t("users.banConfirm.message"),
+                                  confirmLabel: t("users.banConfirm.action"),
+                                  icon: "block",
+                                  danger: true,
+                                },
                               )
                             }
                           >
@@ -742,7 +783,13 @@ function UsersTab({ call, currentUserId }: { call: Call; currentUserId: string |
                           <Button
                             variant="secondary"
                             size="sm"
-                            onClick={() => act(`/users/${user.id}`, "DELETE", undefined, t("users.deleteConfirm", { name: user.display_name }))}
+                            onClick={() => act(`/users/${user.id}`, "DELETE", undefined, {
+                              title: t("users.deleteConfirm.title", { name: user.display_name }),
+                              message: t("users.deleteConfirm.message"),
+                              confirmLabel: t("users.deleteConfirm.action"),
+                              icon: "delete",
+                              danger: true,
+                            })}
                             aria-label={t("users.deleteLabel", { name: user.display_name })}
                           >
                             <Icon name="delete" className="size-4" />
@@ -889,6 +936,7 @@ type BannedWord = { id: number; term: string; reason: (typeof BANNED_REASONS)[nu
 
 function BannedWordsTab({ call }: { call: Call }) {
   const t = useTranslations("Admin");
+  const confirm = useConfirm();
   const { data, reload } = useResource<{ words: BannedWord[] }>(call, "/banned-words");
   const [filter, setFilter] = useState("");
   // Masquée par défaut : la liste ne s'affiche qu'à la demande.
@@ -909,7 +957,14 @@ function BannedWordsTab({ call }: { call: Call }) {
   }
 
   async function remove(word: BannedWord) {
-    if (!window.confirm(t("bannedWords.deleteConfirm", { term: word.term }))) return;
+    const confirmed = await confirm({
+      title: t("bannedWords.deleteConfirm.title", { term: word.term }),
+      message: t("bannedWords.deleteConfirm.message"),
+      confirmLabel: t("bannedWords.deleteConfirm.action"),
+      icon: "delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     if ((await call(`/banned-words/${word.id}`, { method: "DELETE" })) !== null) reload();
   }
 

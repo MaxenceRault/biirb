@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
@@ -227,6 +228,7 @@ function SupportBoard({ call, admins, visible }: BoardProps) {
 
 function DevBoard({ call, admins, visible }: BoardProps) {
   const t = useTranslations("Admin.kanban");
+  const confirm = useConfirm();
   const format = useFormatter();
   const { tickets, setTickets, reload } = useBoard<DevTicket>(call, "/dev-tickets");
   const [editing, setEditing] = useState<number | null>(null);
@@ -260,7 +262,14 @@ function DevBoard({ call, admins, visible }: BoardProps) {
   }
 
   async function remove(ticket: DevTicket) {
-    if (!window.confirm(t("deleteConfirm", { title: ticket.title }))) return;
+    const confirmed = await confirm({
+      title: t("deleteConfirm.title", { title: ticket.title }),
+      message: t("deleteConfirm.message"),
+      confirmLabel: t("deleteConfirm.action"),
+      icon: "delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     if ((await call(`/dev-tickets/${ticket.id}`, { method: "DELETE" })) !== null) reload();
   }
 

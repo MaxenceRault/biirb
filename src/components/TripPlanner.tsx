@@ -15,6 +15,7 @@ import { Icon, type IconName } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { FIELD_CLASS_NAME, Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { countryName, flagEmoji } from "@/lib/country";
 import type { Archetype } from "@/lib/posts";
 import { apiDownload, apiFetch, getSessionSnapshot, parseSessionUser } from "@/client/session";
@@ -183,6 +184,7 @@ type LoadState = { status: "loading" } | { status: "error"; error: PlannerError 
 
 export function TripPlanner({ tripId }: { tripId: string }) {
   const t = useTranslations("Planner");
+  const confirm = useConfirm();
   const router = useRouter();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [error, setError] = useState<PlannerError | null>(null);
@@ -241,7 +243,13 @@ export function TripPlanner({ tripId }: { tripId: string }) {
   }
 
   async function regenerate() {
-    if (!window.confirm(t("trip.regenerateConfirm"))) return;
+    const confirmed = await confirm({
+      title: t("trip.regenerateConfirm.title"),
+      message: t("trip.regenerateConfirm.message", { hours: TRIP_UNDO_HOURS }),
+      confirmLabel: t("trip.regenerateConfirm.action"),
+      icon: "sparkles",
+    });
+    if (!confirmed) return;
     setRegenerating(true);
     await mutate("/regenerate", "POST");
     setRegenerating(false);
@@ -249,7 +257,15 @@ export function TripPlanner({ tripId }: { tripId: string }) {
 
   // Une réimagination remplace tout le planning : on confirme avant de revenir en arrière.
   async function undo(kind: TripPlanChangeKind) {
-    if (kind === "regenerate" && !window.confirm(t("undo.confirmRegenerate"))) return;
+    if (kind === "regenerate") {
+      const confirmed = await confirm({
+        title: t("undo.confirmRegenerate.title"),
+        message: t("undo.confirmRegenerate.message"),
+        confirmLabel: t("undo.confirmRegenerate.action"),
+        icon: "refresh",
+      });
+      if (!confirmed) return;
+    }
     setUndoing(true);
     const ok = await mutate("/undo", "POST");
     // Refusée (délai passé, planning modifié depuis) : le voyage relu ne propose plus d'annuler.
@@ -259,7 +275,14 @@ export function TripPlanner({ tripId }: { tripId: string }) {
   }
 
   async function handleDelete() {
-    if (!window.confirm(t("trip.deleteConfirm"))) return;
+    const confirmed = await confirm({
+      title: t("trip.deleteConfirm.title"),
+      message: t("trip.deleteConfirm.message"),
+      confirmLabel: t("trip.deleteConfirm.action"),
+      icon: "delete",
+      danger: true,
+    });
+    if (!confirmed) return;
     setError(null);
     const result = await apiFetch(basePath, { method: "DELETE" });
     if ("data" in result || result.error === "NOT_FOUND") return router.push("/planner");
@@ -667,6 +690,7 @@ function DayPlanner({
   onLocked: (feature: TripPassFeature) => void;
 }) {
   const t = useTranslations("Planner");
+  const confirm = useConfirm();
   const format = useFormatter();
   const days = tripDays(trip.start_date, trip.end_date);
   const [selectedDay, setSelectedDay] = useState(days[0]);
@@ -680,7 +704,13 @@ function DayPlanner({
 
   async function regenerateDay() {
     if (!passActive) return onLocked("day");
-    if (!window.confirm(t("days.regenerateConfirm"))) return;
+    const confirmed = await confirm({
+      title: t("days.regenerateConfirm.title"),
+      message: t("days.regenerateConfirm.message", { hours: TRIP_UNDO_HOURS }),
+      confirmLabel: t("days.regenerateConfirm.action"),
+      icon: "refresh",
+    });
+    if (!confirmed) return;
     setRegeneratingDay(true);
     await mutate(`/days/${day}/regenerate`, "POST");
     setRegeneratingDay(false);

@@ -18,6 +18,8 @@ const zodObject = {
   message: "Utiliser z.strictObject() : allowlist, tout champ inconnu est rejeté",
 };
 
+const confirmMessage = "Confirmation : useConfirm() (components/ui/ConfirmDialog.tsx), pas window.confirm";
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -30,6 +32,9 @@ const eslintConfig = defineConfig([
       "no-console": "error",
       // Textes affichés dans messages/fr.json ; seule la ponctuation reste en dur.
       "react/jsx-no-literals": ["error", { ignoreProps: true, allowedStrings: ["•", "·", "@", "/", "#", ":", "—", "→"] }],
+      // Confirmations dans la fenêtre du design system (useConfirm, components/ui/ConfirmDialog.tsx), jamais la boîte native.
+      "no-restricted-properties": ["error", { object: "window", property: "confirm", message: confirmMessage }],
+      "no-restricted-globals": ["error", { name: "confirm", message: confirmMessage }],
     },
   },
   {

@@ -12,6 +12,7 @@ import { FormError } from "@/components/ui/FormError";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { FIELD_CLASS_NAME, Input } from "@/components/ui/Input";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { TripRole } from "@/components/TripSharePanel";
 import { apiFetch } from "@/client/session";
 import { CURRENCIES, currencyDecimals, EXPENSE_CATEGORIES, SPLIT_MODES, type SplitMode } from "@/schemas/trip-expense.schema";
@@ -165,6 +166,7 @@ function ExpenseList({
   mutate: (path: string, method: string, body?: unknown) => Promise<boolean>;
 }) {
   const t = useTranslations("Planner.expenses");
+  const confirm = useConfirm();
   const format = useFormatter();
   const money = useMoney(ledger.currency);
 
@@ -207,8 +209,14 @@ function ExpenseList({
                 <IconButton
                   icon="delete"
                   label={t("delete", { title: expense.title })}
-                  onClick={() => {
-                    if (window.confirm(t("deleteConfirm"))) void mutate(`/expenses/${expense.id}`, "DELETE");
+                  onClick={async () => {
+                    if (await confirm({
+                      title: t("deleteConfirm.title"),
+                      message: t("deleteConfirm.message"),
+                      confirmLabel: t("deleteConfirm.action"),
+                      icon: "delete",
+                      danger: true,
+                    })) void mutate(`/expenses/${expense.id}`, "DELETE");
                   }}
                 />
               </div>

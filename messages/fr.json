@@ -1,4 +1,7 @@
 {
+  "ConfirmDialog": {
+    "cancel": "Retour"
+  },
   "Metadata": {
     "title": "Biirb",
     "description": "Blog et planificateur de voyage grâce aux posts et avis des voyageurs"
@@ -396,7 +399,11 @@
       "hint": "Annulable pendant {hours} h, tant que le planning n'est pas modifié.",
       "action": "Annuler",
       "undoing": "Annulation…",
-      "confirmRegenerate": "Annuler remet le planning, la checklist et le budget d'avant la réimagination. Continuer ?"
+      "confirmRegenerate": {
+        "title": "Revenir au planning d'avant ?",
+        "message": "Les activités, la checklist et le budget reviennent comme avant la réimagination de Biirbou.",
+        "action": "Revenir en arrière"
+      }
     },
     "trip": {
       "route": "Étapes :",
@@ -411,9 +418,17 @@
       "cancel": "Annuler",
       "regenerate": "Réimaginer",
       "regenerating": "Biirbou réimagine…",
-      "regenerateConfirm": "Réimaginer remplace toutes les activités, la checklist et le budget. Continuer ?",
+      "regenerateConfirm": {
+        "title": "Réimaginer le planning ?",
+        "message": "Biirbou remplace toutes les activités, la checklist et le budget. Vous pourrez annuler pendant {hours} h.",
+        "action": "Réimaginer"
+      },
       "delete": "Supprimer",
-      "deleteConfirm": "Supprimer définitivement ce voyage ?",
+      "deleteConfirm": {
+        "title": "Supprimer ce voyage ?",
+        "message": "Le planning, les dépenses et la discussion sont supprimés définitivement, pour tous les membres.",
+        "action": "Supprimer le voyage"
+      },
       "dates": "{start} – {end}",
       "budgetChip": "Budget : {total} €",
       "budgetChipTarget": "Budget : {total} € / {target} € prévus",
@@ -436,7 +451,11 @@
       "empty": "Aucune activité ce jour-là.",
       "regenerate": "Re-générer ce jour",
       "regenerating": "Génération du jour…",
-      "regenerateConfirm": "Re-générer remplace les activités de ce jour (les autres jours ne changent pas). Continuer ?",
+      "regenerateConfirm": {
+        "title": "Re-générer ce jour ?",
+        "message": "Biirbou remplace les activités de ce jour ; les autres jours ne changent pas. Vous pourrez annuler pendant {hours} h.",
+        "action": "Re-générer"
+      },
       "maps": "Itinéraire du jour"
     },
     "item": {
@@ -618,9 +637,17 @@
       "sharedBy": "Partagé par {name}",
       "viewerChat": "En lecteur, vous pouvez lire la discussion mais pas écrire à Biirbou.",
       "leave": "Quitter le voyage",
-      "leaveConfirm": "Quitter ce voyage ? Vous n'y aurez plus accès, sauf nouvelle invitation.",
+      "leaveConfirm": {
+        "title": "Quitter ce voyage ?",
+        "message": "Vous n'y aurez plus accès, sauf nouvelle invitation.",
+        "action": "Quitter le voyage"
+      },
       "remove": "Retirer {name}",
-      "removeConfirm": "Retirer {name} du voyage ?",
+      "removeConfirm": {
+        "title": "Retirer {name} du voyage ?",
+        "message": "Ce membre n'aura plus accès au voyage, sauf nouvelle invitation.",
+        "action": "Retirer"
+      },
       "inviteTitle": "Inviter par pseudo",
       "usernamePlaceholder": "pseudo exact, ex. julie_voyage",
       "inviteRole": "Rôle de la personne invitée",
@@ -675,7 +702,11 @@
       "reimbursement": "{from} a remboursé {to}",
       "edit": "Modifier « {title} »",
       "delete": "Supprimer « {title} »",
-      "deleteConfirm": "Supprimer cette dépense ?",
+      "deleteConfirm": {
+        "title": "Supprimer cette dépense ?",
+        "message": "Les soldes de chacun sont recalculés aussitôt.",
+        "action": "Supprimer"
+      },
       "addTitle": "Nouvelle dépense",
       "editTitle": "Modifier la dépense",
       "payTitle": "Régler une dépense prévue",
@@ -885,7 +916,11 @@
       "show": "Réafficher",
       "delete": "Supprimer",
       "deleteLabel": "Supprimer le récit {title}",
-      "deleteConfirm": "Supprimer définitivement le récit « {title} » et sa photo ?",
+      "deleteConfirm": {
+        "title": "Supprimer le récit « {title} » ?",
+        "message": "Le récit et ses photos sont supprimés définitivement.",
+        "action": "Supprimer le récit"
+      },
       "approve": "Valider et publier"
     },
     "users": {
@@ -896,12 +931,24 @@
       "posts": "{count, plural, =0 {aucun récit} one {# récit} other {# récits}}",
       "joined": "inscrit le {date}",
       "roleLabel": "Rôle de {name}",
-      "promoteConfirm": "Donner les droits d'administration à {name} ? Il pourra modérer tout le site.",
+      "promoteConfirm": {
+        "title": "Donner les droits d'administration à {name} ?",
+        "message": "Ce compte pourra modérer tout le site.",
+        "action": "Donner les droits"
+      },
       "ban": "Bannir",
       "unban": "Lever le bannissement",
-      "banConfirm": "Bannir {name} ? Ses sessions sont coupées et il ne pourra plus se connecter.",
+      "banConfirm": {
+        "title": "Bannir {name} ?",
+        "message": "Ses sessions sont coupées et ce compte ne pourra plus se connecter.",
+        "action": "Bannir"
+      },
       "deleteLabel": "Supprimer le compte de {name}",
-      "deleteConfirm": "Supprimer définitivement le compte de {name}, ses récits, voyages et photos ?"
+      "deleteConfirm": {
+        "title": "Supprimer le compte de {name} ?",
+        "message": "Le compte, ses récits, ses voyages et ses photos sont supprimés définitivement.",
+        "action": "Supprimer le compte"
+      }
     },
     "archetypes": {
       "createTitle": "Nouveau type de récit",
@@ -991,7 +1038,11 @@
       "create": "Ajouter",
       "search": "Filtrer les termes…",
       "delete": "Retirer « {term} »",
-      "deleteConfirm": "Retirer « {term} » de la liste ?",
+      "deleteConfirm": {
+        "title": "Retirer « {term} » de la liste ?",
+        "message": "Ce mot ne sera plus refusé dans les récits et les commentaires.",
+        "action": "Retirer"
+      },
       "reasons": {
         "insult": "Insulte",
         "hate": "Haine",
@@ -1029,13 +1080,21 @@
       "giftTitle": "Offrir un pass",
       "giftHint": "Geste commercial ou souci de paiement : le pass est offert, sans paiement. Inscrit au journal.",
       "gift": "Offrir le pass",
-      "giftConfirm": "Offrir le pass voyage au voyage {id} ?",
+      "giftConfirm": {
+        "title": "Offrir le pass voyage ?",
+        "message": "Le voyage {id} reçoit le pass, pour tous ses membres. L'action est inscrite au journal.",
+        "action": "Offrir le pass"
+      },
       "activeTitle": "Pass actifs",
       "activeEmpty": "Aucun pass actif.",
       "gifted": "Offert",
       "paid": "Payé",
       "revoke": "Retirer",
-      "revokeConfirm": "Retirer le pass du voyage « {title} » ? Un éventuel remboursement se fait sur Buy Me a Coffee.",
+      "revokeConfirm": {
+        "title": "Retirer le pass du voyage « {title} » ?",
+        "message": "Un éventuel remboursement se fait sur Buy Me a Coffee.",
+        "action": "Retirer le pass"
+      },
       "trip": "{title} · @{owner} · {id}",
       "done": "Pass attribué.",
       "tripIdPlaceholder": "ex. 3f2b…-…"
@@ -1076,7 +1135,11 @@
       "cancel": "Annuler",
       "edit": "Modifier",
       "delete": "Supprimer",
-      "deleteConfirm": "Supprimer le ticket « {title} » ?",
+      "deleteConfirm": {
+        "title": "Supprimer le ticket « {title} » ?",
+        "message": "Le ticket est supprimé définitivement.",
+        "action": "Supprimer le ticket"
+      },
       "deletedAuthor": "Admin supprimé",
       "assigneesLabel": "Assignés",
       "unassigned": "Non assigné",
@@ -1110,7 +1173,11 @@
     "submit": "Publier",
     "sending": "Envoi…",
     "delete": "Supprimer le commentaire",
-    "deleteConfirm": "Supprimer ce commentaire ?",
+    "deleteConfirm": {
+      "title": "Supprimer ce commentaire ?",
+      "message": "Le commentaire et ses réponses sont supprimés définitivement.",
+      "action": "Supprimer"
+    },
     "loginPrompt": "Connectez-vous pour poser une question ou commenter.",
     "login": "Se connecter",
     "errors": {

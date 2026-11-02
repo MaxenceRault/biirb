@@ -22,7 +22,7 @@ messages/
 └── fr.json                    # Textes de l'interface (i18n, seule langue pour l'instant)
 src/
 ├── app/
-│   ├── layout.tsx             # Layout global (Navbar + Footer + Fonts) + fond de toutes les pages : courbes de niveau (public/topo.svg) + balise Umami (mesure d'audience)
+│   ├── layout.tsx             # Layout global (Navbar + Footer + Fonts) + fond de toutes les pages : courbes de niveau (public/topo.svg) + balise Umami (mesure d'audience) + ConfirmProvider (fenêtre de confirmation)
 │   ├── page.tsx               # Homepage : feed, ou résultats de recherche si /?q= (lieux, puis titres, puis textes)
 │   ├── post/[slug]/page.tsx   # Détail d'un récit : /post/<slug> (ancien lien /post/<id> → redirection 308)
 │   ├── legal/[page]/page.tsx  # CGU, CGV, mentions légales, confidentialité (textes dans messages/fr.json → Legal)
@@ -99,7 +99,7 @@ src/
 ├── i18n/
 │   └── request.ts             # Config next-intl (locale + chargement des messages)
 ├── components/
-│   ├── ui/                    # Design system : ReasoningText (l'IA travaille : phrases en cascade, avec motion), EmptyState, Button, IconButton, Input, Textarea, Autocomplete, PasswordInput, Label, Field, Checkbox, Card, Icon, Avatar, Logo, Badge, Dialog (fenêtre modale <dialog> natif)
+│   ├── ui/                    # Design system : ReasoningText (l'IA travaille : phrases en cascade, avec motion), EmptyState, Button, IconButton, Input, Textarea, Autocomplete, PasswordInput, Label, Field, Checkbox, Card, Icon, Avatar, Logo, Badge, Dialog (fenêtre modale <dialog> natif), ConfirmDialog (fenêtre de confirmation commune : ConfirmProvider dans le layout + hook useConfirm ; titre, explication, verbe d'action, icône, ton danger)
 │   ├── Navbar.tsx             # Barre du haut (version visiteur / connecté)
 │   ├── NavbarAccount.tsx      # Zone compte de la Navbar (client : lit la session du navigateur)
 │   ├── Footer.tsx
@@ -178,7 +178,7 @@ compose.yaml                   # Dev conteneurisé : code monté, node_modules d
 
 ## Déploiement (Cloud Run)
 
-- **CI sur chaque PR vers `main`** (`.github/workflows/ci.yml`, sans accès GCP) : le lint fait aussi respecter les règles du projet (couches, `getConfig()`, `z.strictObject`, textes dans `messages/fr.json`, console uniquement dans `logger.ts`), puis typecheck, `npm audit` et build. Les règles des migrations (jamais modifiées, `set role brb_admin;`, horodatage unique), de `openapi.ts` et de `.env.example` ne sont plus vérifiées par la CI : à contrôler en revue de PR. Actions GitHub épinglées par SHA.
+- **CI sur chaque PR vers `main`** (`.github/workflows/ci.yml`, sans accès GCP) : le lint fait aussi respecter les règles du projet (couches, `getConfig()`, `z.strictObject`, textes dans `messages/fr.json`, console uniquement dans `logger.ts`, confirmations par `useConfirm` et jamais `window.confirm`), puis typecheck, `npm audit` et build. Les règles des migrations (jamais modifiées, `set role brb_admin;`, horodatage unique), de `openapi.ts` et de `.env.example` ne sont plus vérifiées par la CI : à contrôler en revue de PR. Actions GitHub épinglées par SHA.
 - **Automatique** : chaque push sur `main` est déployé par GitHub Actions (`.github/workflows/deploy.yml`) sur https://brb-105103278561.europe-west9.run.app. Un `main` qui ne passe pas le lint ou le build n'est pas déployé (onglet *Actions* du repo pour suivre).
 - Authentification GitHub → GCP sans clé ni secret GitHub : Workload Identity Federation (pool `github`, provider `github-repo`, limité à la branche `main` de ce repo) → compte de service `brb-deploy` (droits de déploiement uniquement).
 - L'app tourne avec le compte de service `brb-run` (Cloud SQL en `brb_app`, Vertex AI, bucket des photos, lecture des secrets). Images dans Artifact Registry `europe-west9-docker.pkg.dev/biirb-511608/brb/web`.
@@ -223,6 +223,8 @@ DATABASE     Cloud SQL (Postgres)
 - Référence : design system « Kinetic Horizon » (maquettes Stitch). Thème clair uniquement.
 - Couleurs, rayons et espacements passent par les tokens définis dans `src/app/globals.css` (`@theme`), pas par des valeurs codées en dur dispersées dans les composants.
 - Avant de créer un composant, vérifier qu'un équivalent n'existe pas déjà dans `ui/`.
+- **Confirmations** : toute action à confirmer (suppression, retrait d'un membre, bannissement, réimagination, annulation…) passe par la fenêtre `ConfirmDialog`, jamais par `window.confirm` (interdit par le lint : `no-restricted-properties` / `no-restricted-globals`). Dans un composant client : `const confirm = useConfirm();` puis `const confirmed = await confirm({ title, message, confirmLabel, icon, danger });`. Textes dans `messages/fr.json`, une clé `…Confirm` par action avec `title` (question courte : « Supprimer cette dépense ? »), `message` (ce qui va se passer, sans promesse fausse : vérifier les cascades en base) et `action` (verbe du bouton : « Supprimer », « Réimaginer », jamais « OK » ni « Confirmer »). `danger: true` pour une action destructive : bouton et pastille rouges (`error`), focus de départ sur « Retour » ; sinon accent, focus sur l'action. Icône : celle de l'action (`delete`, `block`, `logout`, `sparkles`, `refresh`…). Refus : « Retour » (jamais « Annuler », qui désigne déjà l'annulation d'un changement de Biirbou), Échap, clic sur le fond ou croix.
+- **Fenêtres** (`ui/Dialog`) : `<dialog>` natif, `size` (`md` par défaut, `sm` pour une confirmation), `description` sous le titre (liée par `aria-describedby`). Apparition en fondu (`@starting-style`, `motion-safe` : rien si l'utilisateur réduit les animations).
 
 ## Sécurité — contrôle absolu
 
