@@ -284,3 +284,33 @@ export function getMailConfig(): MailConfig | null {
     appUrl: parsed.data.APP_URL?.replace(/\/+$/, "") ?? null,
   });
 }
+
+// Mesure d'audience (Umami Cloud, sans cookie) : absente ou invalide, seule la mesure est coupée.
+// Lue aussi au build : la balise est figée dans la page statique (build Docker ET variable Cloud Run).
+const analyticsSchema = z.object({
+  UMAMI_WEBSITE_ID: z.uuid(),
+  APP_URL: z.url({ protocol: /^https?$/ }).optional(),
+});
+
+// domain : seul domaine compté (APP_URL), pour ignorer un build lancé en local.
+export type AnalyticsConfig = { websiteId: string; domain: string | null };
+
+let analytics: AnalyticsConfig | null | undefined;
+
+export function getAnalyticsConfig(): AnalyticsConfig | null {
+  if (analytics !== undefined) return analytics;
+
+  const { UMAMI_WEBSITE_ID, APP_URL } = process.env;
+  if (!UMAMI_WEBSITE_ID) return (analytics = null);
+
+  const parsed = analyticsSchema.safeParse({ UMAMI_WEBSITE_ID, APP_URL });
+  if (!parsed.success) {
+    const names = parsed.error.issues.map((issue) => issue.path.join(".")).join(", ");
+    logError("config", `invalid analytics env (analytics disabled): ${names}`);
+    return (analytics = null);
+  }
+  return (analytics = {
+    websiteId: parsed.data.UMAMI_WEBSITE_ID,
+    domain: parsed.data.APP_URL ? new URL(parsed.data.APP_URL).hostname : null,
+  });
+}

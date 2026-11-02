@@ -1377,7 +1377,7 @@
     "privacy": {
       "short": "Confidentialité",
       "title": "Politique de confidentialité",
-      "date": "17 octobre 2026",
+      "date": "2 novembre 2026",
       "sections": [
         {
           "title": "Responsable du traitement",
@@ -1392,19 +1392,20 @@
             "Contenus : récits, photos, commentaires, mentions « j'aime » et enregistrements, signalements, tickets de support.",
             "Planificateur : voyages, activités, checklist, budget, dépenses partagées (y compris le nom des participants sans compte que vous ajoutez), messages échangés avec l'IA.",
             "Pass voyage : empreinte chiffrée et aperçu masqué de l'email de paiement, montant, date, consentements donnés. Aucune donnée bancaire.",
-            "Technique : journaux du serveur (erreurs, adresse IP utilisée temporairement pour limiter les abus)."
+            "Technique : journaux du serveur (erreurs, adresse IP utilisée temporairement pour limiter les abus).",
+            "Mesure d'audience : pages consultées (sans leurs paramètres ni leur fragment, qui peuvent contenir une recherche ou un code d'invitation), page de provenance, type d'appareil, navigateur, langue, pays et ville approximatifs (déduits de l'adresse IP, qui n'est pas conservée). Événements anonymes : inscription, lecture et publication d'un récit, création d'un voyage, utilisation de Biirbou, invitation d'un compagnon, commande et achat du pass, accompagnés seulement de catégories et de nombres (type de récit, pays de destination, durée du voyage, montant). Jamais d'email, de pseudo ni d'identifiant de compte, de récit ou de voyage."
           ]
         },
         {
           "title": "Finalités et bases légales",
           "paragraphs": [
-            "Fournir le service et votre compte (exécution des CGU) ; vendre et activer le pass voyage (exécution du contrat, obligations comptables) ; modération et sécurité, lutte contre les abus (intérêt légitime) ; respect des obligations légales."
+            "Fournir le service et votre compte (exécution des CGU) ; vendre et activer le pass voyage (exécution du contrat, obligations comptables) ; modération et sécurité, lutte contre les abus (intérêt légitime) ; mesure d'audience anonyme, pour comprendre l'usage du site et l'améliorer (intérêt légitime) ; respect des obligations légales."
           ]
         },
         {
           "title": "Destinataires et sous-traitants",
           "paragraphs": [
-            "Google Cloud (hébergement, base de données, stockage des photos, journaux) et Google Vertex AI (modèle Gemini : génération des plannings, discussion, vérification des photos), dans l'Union européenne. Buy Me a Coffee (dons et paiement du pass), qui traite vos données de paiement selon sa propre politique, avec des transferts possibles hors de l'Union européenne. Les images d'illustration peuvent être chargées depuis Unsplash. Vos données ne sont jamais vendues."
+            "Google Cloud (hébergement, base de données, stockage des photos, journaux) et Google Vertex AI (modèle Gemini : génération des plannings, discussion, vérification des photos), dans l'Union européenne. Buy Me a Coffee (dons et paiement du pass), qui traite vos données de paiement selon sa propre politique, avec des transferts possibles hors de l'Union européenne. Umami Cloud (Umami Software) pour la mesure d'audience, avec des transferts possibles hors de l'Union européenne. Les images d'illustration peuvent être chargées depuis Unsplash. Vos données ne sont jamais vendues."
           ]
         },
         {
@@ -1413,6 +1414,7 @@
             "Compte, récits, photos, commentaires et voyages : tant que le compte existe. Vous pouvez demander la suppression de votre compte via la page Support ; elle efface vos données, sauf celles qui doivent être gardées comme preuve (ci-dessous).",
             "Sessions de connexion : valables 30 jours au plus. Commande de pass en cours : 24 heures.",
             "Journaux techniques du serveur : 30 jours.",
+            "Mesure d'audience : 6 mois, puis supprimée par Umami.",
             "Achats du pass et preuves des consentements (CGU, CGV, renonciation au droit de rétractation) : 5 ans après l'achat ou l'acceptation, pour faire valoir ou défendre un droit.",
             "Adresses IP utilisées contre les abus : en mémoire uniquement, le temps de la limitation (1 heure au plus)."
           ]
@@ -1420,7 +1422,7 @@
         {
           "title": "Cookies et stockage local",
           "paragraphs": [
-            "Brb n'utilise ni publicité ni mesure d'audience. Un seul cookie, strictement nécessaire, maintient votre connexion (brb_refresh). Le navigateur garde aussi votre profil affiché et, pour la consultation hors ligne, une copie de vos voyages, effacée à la déconnexion. Ces éléments ne nécessitent pas de consentement."
+            "Brb n'utilise aucune publicité. Deux cookies strictement nécessaires : brb_refresh maintient votre connexion, brb_device reconnaît un appareil où vous vous êtes déjà connecté (pour qu'un tiers ne puisse pas bloquer votre compte en multipliant les essais). La mesure d'audience (Umami) ne dépose aucun cookie et n'écrit rien dans votre navigateur : les statistiques sont anonymes et réservées à l'équipe Brb. Vous pouvez vous y opposer en activant l'option « Ne pas me suivre » (Do Not Track) de votre navigateur : aucune page vue ni aucun événement de votre navigateur n'est alors mesuré. Les actions enregistrées par le serveur (inscription, publication d'un récit, création d'un voyage, achat du pass…) restent comptées, sans aucun lien avec vous ni avec votre navigateur. Le navigateur garde aussi votre profil affiché et, pour la consultation hors ligne, une copie de vos voyages, effacée à la déconnexion. Ces éléments ne nécessitent pas de consentement."
           ]
         },
         {

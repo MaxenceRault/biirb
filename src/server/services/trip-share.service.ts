@@ -1,4 +1,5 @@
 import "server-only";
+import { trackServerEvent } from "@/server/services/analytics.service";
 import { createHash, randomBytes } from "node:crypto";
 import {
   answerUserInvitation,
@@ -43,6 +44,7 @@ export async function inviteByUsername(userId: string, tripId: number, input: In
   // Places réservées par les invitations en attente ; la limite est revérifiée à l'acceptation.
   if ((await countTripTravelers(tripId, { pendingInvitations: true })) >= TRIP_MAX_TRAVELERS) throw new TripShareError("TRIP_FULL");
   if (!(await upsertUserInvitation(tripId, inviteeId, input.role, userId, expiry()))) throw new TripShareError("ALREADY_MEMBER");
+  await trackServerEvent("companion_invited", { method: "username", role: input.role });
   return getTripSharing(userId, tripId);
 }
 
@@ -53,6 +55,7 @@ export async function createInviteLink(userId: string, tripId: number, role: Tri
   const code = randomBytes(32).toString("base64url");
   const expiresAt = expiry();
   const id = await insertLinkInvitation(tripId, hashCode(code), role, userId, expiresAt);
+  await trackServerEvent("companion_invited", { method: "link", role });
   return { id, code, role, expiresAt: expiresAt.toISOString() };
 }
 

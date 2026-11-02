@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
 import { FormError } from "@/components/ui/FormError";
 import { Icon } from "@/components/ui/Icon";
+import { trackEvent } from "@/client/analytics";
 import { apiFetch } from "@/client/session";
 import type { TripRole } from "@/components/TripSharePanel";
 
@@ -72,13 +73,13 @@ export function TripPassDialog({ feature, onClose, ...props }: OfferProps & { fe
       )}
       <p className="text-body-sm text-ink-soft">{t("pass.hint")}</p>
       {/* key : repart d'un formulaire vierge à chaque ouverture. */}
-      {feature && <TripPassOffer key={feature} {...props} onRefresh={refreshAndClose} />}
+      {feature && <TripPassOffer key={feature} {...props} feature={feature} onRefresh={refreshAndClose} />}
     </Dialog>
   );
 }
 
 // Avantages + achat. Le pass est activé par le webhook Buy Me a Coffee, jamais par le navigateur.
-function TripPassOffer({ tripId, pass, role, onRefresh }: OfferProps) {
+function TripPassOffer({ tripId, pass, role, feature, onRefresh }: OfferProps & { feature: TripPassFeature }) {
   const t = useTranslations("Planner");
   const price = usePrice(pass);
   const [checkout, setCheckout] = useState<{ url: string; email: string | null } | null>(null);
@@ -103,6 +104,8 @@ function TripPassOffer({ tripId, pass, role, onRefresh }: OfferProps) {
     if ("data" in result) {
       setCheckout(result.data);
       if (tab) tab.location.href = result.data.url;
+      // source : ce qui a ouvert l'offre (fonction verrouillée, limite atteinte ou carte « info »).
+      trackEvent("trip_pass_checkout_started", { source: feature });
       return;
     }
     tab?.close();

@@ -1,4 +1,5 @@
 import "server-only";
+import { trackServerEvent } from "@/server/services/analytics.service";
 import { detectImage } from "@/server/images";
 import { randomUUID } from "node:crypto";
 import type { Archetype, FeedPage, FeedPost, TrendingDestination } from "@/lib/posts";
@@ -136,6 +137,12 @@ export async function createPost(
       throw error;
     }
 
+    await trackServerEvent("story_created", {
+      archetype: archetype.slug,
+      country: destination.country,
+      photos: 1 + bodyPhotoUrls.length,
+      pendingReview,
+    });
     return { ...created, pendingReview };
   } catch (error) {
     await Promise.all(uploadedPaths.map((path) => deletePostPhoto(path).catch(() => {})));

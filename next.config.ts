@@ -7,13 +7,14 @@ const isDev = process.env.NODE_ENV !== "production";
 // 'unsafe-inline' : Next injecte des scripts inline ; un nonce imposerait un rendu dynamique (incompatible avec cacheComponents).
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  // Umami Cloud (mesure d'audience) : script sur cloud.umami.is, événements envoyés à gateway.umami.is.
+  `script-src 'self' 'unsafe-inline' https://cloud.umami.is${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   // blob: aperçu photo de l'éditeur ; data: icônes de Swagger UI (dev).
   "img-src 'self' data: blob: https://images.unsplash.com https://storage.googleapis.com",
   "font-src 'self'",
   // Carte du voyage (MapLibre) : style, tuiles, polices et icônes d'OpenFreeMap. Son worker est servi par le site ('self').
-  `connect-src 'self' https://tiles.openfreemap.org${isDev ? " ws: wss:" : ""}`,
+  `connect-src 'self' https://tiles.openfreemap.org https://gateway.umami.is${isDev ? " ws: wss:" : ""}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

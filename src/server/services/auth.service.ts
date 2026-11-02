@@ -1,4 +1,5 @@
 import "server-only";
+import { trackServerEvent } from "@/server/services/analytics.service";
 import { LEGAL_VERSIONS } from "@/lib/legal";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
@@ -58,6 +59,7 @@ export async function register(name: string, email: string, password: string): P
     terms_version: LEGAL_VERSIONS.terms,
   });
 
+  await trackServerEvent("sign_up");
   return createSession(user, false);
 }
 

@@ -4,6 +4,7 @@ import { getBuyMeACoffeeConfig, type TripPassConfig } from "@/server/config";
 import { logInfo } from "@/server/logger";
 import { findActiveUserIdByEmail, findUserEmail } from "@/server/repositories/patron.repository";
 import { hasActiveTripPass, recordTripPassPurchase, refundTripPass, saveTripPassOrder } from "@/server/repositories/trip-pass.repository";
+import { trackServerEvent } from "@/server/services/analytics.service";
 import { requireTripRole } from "@/server/services/trip-access.service";
 import { bmcExtraPurchaseSchema } from "@/schemas/patron.schema";
 import { LEGAL_VERSIONS } from "@/lib/legal";
@@ -79,6 +80,8 @@ export async function handleTripPassEvent(type: string, data: unknown) {
     payerEmailHint: email ? maskEmail(email) : null,
   });
   if (!recorded) return logInfo("trip-pass", { ignored: type, paymentId: id, reason: "duplicate" });
+  // Après le doublon : un webhook rejoué ne compte pas deux fois le revenu.
+  await trackServerEvent("trip_pass_purchased", { revenue: amount, currency, assigned: recorded.tripId !== null });
   // Pas de compte ou pas de commande : l'achat attend qu'un admin le rattache (onglet Pass voyage).
   logInfo("trip-pass", {
     event: type,

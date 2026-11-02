@@ -24,6 +24,9 @@ COPY . .
 # Figée dans le build (CORS de next.config.ts).
 ARG APP_URL
 ENV APP_URL=$APP_URL
+# Figée dans la page statique (balise Umami du layout). Vide : pas de mesure d'audience.
+ARG UMAMI_WEBSITE_ID
+ENV UMAMI_WEBSITE_ID=$UMAMI_WEBSITE_ID
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 

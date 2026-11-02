@@ -25,6 +25,8 @@ env:
   BMC_TRIP_PASS_URL: https://buymeacoffee.com/maxence_rault/e/587593
   BMC_TRIP_PASS_EXTRA_ID: "587593"
   SMTP_USER: biirb.app@gmail.com
+  # Mesure d'audience (Umami Cloud, pas un secret) : vide = pas de mesure.
+  UMAMI_WEBSITE_ID: 4050219f-9e0f-4e54-85e4-ebfb4dd0beb1
   IMAGE: europe-west9-docker.pkg.dev/biirb-511608/brb/web:${{ github.sha }}
 
 jobs:
@@ -55,7 +57,7 @@ jobs:
       - name: Build et push de l'image
         run: |
           gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
-          docker build --build-arg APP_URL="$APP_URL" -t "$IMAGE" .
+          docker build --build-arg APP_URL="$APP_URL" --build-arg UMAMI_WEBSITE_ID="$UMAMI_WEBSITE_ID" -t "$IMAGE" .
           docker push "$IMAGE"
 
       # Secrets JWT dans Secret Manager. Une seule instance : les rate limits sont en mémoire.
@@ -72,6 +74,6 @@ jobs:
             --cpu-boost \
             --min-instances=0 \
             --max-instances=1 \
-            --set-env-vars="CLOUD_SQL_INSTANCE=$PROJECT_ID:$REGION:biirb-db1,DB_NAME=brb,DB_USER=brb-run@$PROJECT_ID.iam,GCP_PROJECT_ID=$PROJECT_ID,VERTEX_LOCATION=$REGION,TRUSTED_PROXY_HOPS=1,APP_URL=$APP_URL,BMC_PAGE_URL=$BMC_PAGE_URL,BMC_TRIP_PASS_URL=$BMC_TRIP_PASS_URL,BMC_TRIP_PASS_EXTRA_ID=$BMC_TRIP_PASS_EXTRA_ID,SMTP_USER=$SMTP_USER" \
+            --set-env-vars="CLOUD_SQL_INSTANCE=$PROJECT_ID:$REGION:biirb-db1,DB_NAME=brb,DB_USER=brb-run@$PROJECT_ID.iam,GCP_PROJECT_ID=$PROJECT_ID,VERTEX_LOCATION=$REGION,TRUSTED_PROXY_HOPS=1,APP_URL=$APP_URL,BMC_PAGE_URL=$BMC_PAGE_URL,BMC_TRIP_PASS_URL=$BMC_TRIP_PASS_URL,BMC_TRIP_PASS_EXTRA_ID=$BMC_TRIP_PASS_EXTRA_ID,SMTP_USER=$SMTP_USER,UMAMI_WEBSITE_ID=$UMAMI_WEBSITE_ID" \
             --set-secrets="JWT_SECRET=brb-jwt-secret:latest,JWT_REFRESH_SECRET=brb-jwt-refresh-secret:latest,BMC_WEBHOOK_SECRET=brb-bmc-webhook-secret:latest,SMTP_PASSWORD=brb-smtp-password:latest" \
             --quiet
