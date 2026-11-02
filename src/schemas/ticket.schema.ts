@@ -14,6 +14,13 @@ export type TicketStatus = (typeof TICKET_STATUSES)[number];
 export const TICKET_PRIORITIES = ["low", "medium", "high"] as const;
 export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 
+// Admins assignés à un ticket (Kanban, support et développement) : liste complète, remplace la précédente.
+export const TICKET_MAX_ASSIGNEES = 5;
+export const assigneeIdsSchema = z
+  .array(z.uuid())
+  .max(TICKET_MAX_ASSIGNEES)
+  .refine((ids) => new Set(ids).size === ids.length);
+
 // trip_pass : paiement ou activation du pass voyage, les admins sont prévenus par email.
 export const TICKET_CATEGORIES = ["trip_pass", "bug", "report", "account", "other"] as const;
 export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
@@ -34,6 +41,6 @@ export const adminTicketsQuerySchema = z.strictObject({
 });
 
 export const adminUpdateTicketSchema = z
-  .strictObject({ status: z.enum(TICKET_STATUSES), priority: z.enum(TICKET_PRIORITIES) })
+  .strictObject({ status: z.enum(TICKET_STATUSES), priority: z.enum(TICKET_PRIORITIES), assigneeIds: assigneeIdsSchema })
   .partial()
   .refine((changes) => Object.keys(changes).length > 0);

@@ -189,6 +189,18 @@ export async function findActiveAdminEmails(): Promise<string[]> {
   return rows.map((row) => row.email);
 }
 
+// Admins assignables à un ticket (Kanban) : jamais d'email.
+export type AssigneeRow = Pick<ProfileUser, "id" | "username" | "display_name" | "avatar_url" | "avatar_seed" | "avatar_background_color">;
+
+export async function findActiveAdmins(): Promise<AssigneeRow[]> {
+  const db = await getDb();
+  const { rows } = await db.query<AssigneeRow>(
+    `select id, username, display_name, avatar_url, avatar_seed, avatar_background_color
+     from users where role = 'admin' and banned_at is null order by display_name`,
+  );
+  return rows;
+}
+
 export async function findUsername(id: string): Promise<string | null> {
   const db = await getDb();
   const { rows } = await db.query<{ username: string }>("select username from users where id = $1", [id]);

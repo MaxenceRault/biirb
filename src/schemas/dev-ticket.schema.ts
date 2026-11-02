@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TICKET_PRIORITIES } from "@/schemas/ticket.schema";
+import { assigneeIdsSchema, TICKET_PRIORITIES } from "@/schemas/ticket.schema";
 
 // Identiques aux contraintes SQL de dev_ticket.
 export const DEV_TICKET_TITLE_MIN = 3;
@@ -25,7 +25,7 @@ export const createDevTicketSchema = z.strictObject({
 });
 
 export const updateDevTicketSchema = z
-  .strictObject({ title, description, status: z.enum(BOARD_COLUMNS), priority: z.enum(TICKET_PRIORITIES) })
+  .strictObject({ title, description, status: z.enum(BOARD_COLUMNS), priority: z.enum(TICKET_PRIORITIES), assigneeIds: assigneeIdsSchema })
   .partial()
   .refine((changes) => Object.keys(changes).length > 0);
 

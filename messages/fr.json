@@ -1034,7 +1034,7 @@
         "dev": "Développement"
       },
       "hints": {
-        "support": "Tickets envoyés par les utilisateurs. Déplacer un ticket change aussi l'état qu'ils voient sur leur page Support ; la priorité reste visible des admins seulement.",
+        "support": "Tickets envoyés par les utilisateurs. Déplacer un ticket change aussi l'état qu'ils voient sur leur page Support ; la priorité et les assignés restent visibles des admins seulement.",
         "dev": "Vos tickets internes pour améliorer Biirb : visibles des admins seulement."
       },
       "columns": {
@@ -1064,7 +1064,18 @@
       "edit": "Modifier",
       "delete": "Supprimer",
       "deleteConfirm": "Supprimer le ticket « {title} » ?",
-      "deletedAuthor": "Admin supprimé"
+      "deletedAuthor": "Admin supprimé",
+      "assigneesLabel": "Assignés",
+      "unassigned": "Non assigné",
+      "assign": "Assigner",
+      "assignDone": "Terminé",
+      "assigneesMax": "{max} personnes au plus par ticket",
+      "filterLabel": "Filtrer les tickets",
+      "filters": {
+        "all": "Tous",
+        "mine": "Les miens",
+        "unassigned": "Non assignés"
+      }
     }
   },
   "TripExport": {

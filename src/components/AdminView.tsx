@@ -237,7 +237,7 @@ export function AdminView() {
       <div role="tabpanel">
         {tab === "dashboard" && <DashboardTab call={call} onOpen={setTab} />}
         {tab === "reports" && <ReportsTab call={call} />}
-        {tab === "tickets" && <AdminKanban call={call} />}
+        {tab === "tickets" && <AdminKanban call={call} currentUserId={currentUserId} />}
         {tab === "posts" && <PostsTab call={call} />}
         {tab === "users" && <UsersTab call={call} currentUserId={currentUserId} />}
         {tab === "tripPasses" && <TripPassesTab call={call} />}

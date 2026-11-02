@@ -33,7 +33,7 @@ import {
 } from "@/schemas/admin.schema";
 import { createArchetypeSchema, updateArchetypeSchema } from "@/schemas/archetype.schema";
 import { createCommentSchema } from "@/schemas/comment.schema";
-import { adminUpdateTicketSchema, createTicketSchema, TICKET_STATUSES } from "@/schemas/ticket.schema";
+import { adminUpdateTicketSchema, createTicketSchema, TICKET_MAX_ASSIGNEES, TICKET_STATUSES } from "@/schemas/ticket.schema";
 import { createDevTicketSchema, updateDevTicketSchema } from "@/schemas/dev-ticket.schema";
 import { displayedBadgeSchema, profileImageSchema, updateProfileSchema } from "@/schemas/user.schema";
 import { USER_ROLES } from "@/lib/roles";
@@ -1159,11 +1159,14 @@ export function buildOpenApiDocument() {
         }),
       },
       "/admin/tickets/{id}": {
-        patch: adminRoute("Changer l'état ou la priorité d'un ticket", {
+        patch: adminRoute("Changer l'état, la priorité ou les assignés d'un ticket", {
           params: [numericIdParam("id")],
           body: adminUpdateTicketSchema,
           ok: noContent,
-          description: "L'état est vu par l'auteur du ticket, la priorité reste interne à l'administration. Inscrit au journal (avant / après).",
+          description:
+            "L'état est vu par l'auteur du ticket, la priorité et les assignés restent internes à l'administration. " +
+            `assigneeIds : liste complète (remplace la précédente, ${TICKET_MAX_ASSIGNEES} au plus), admins actifs uniquement (GET /admin/assignees), sinon 400. ` +
+            "Inscrit au journal (avant / après ; ajoutés / retirés).",
         }),
       },
       "/admin/tickets/board": {
@@ -1171,6 +1174,11 @@ export function buildOpenApiDocument() {
           description:
             "Tous les tickets non clôturés (300 au plus, plus anciens d'abord) et les 30 derniers clôturés. Colonnes : open → À faire, " +
             "in_progress → En cours, resolved → Fait, closed → Clôturé ; déplacer un ticket = PATCH /admin/tickets/{id} (état vu par l'utilisateur).",
+        }),
+      },
+      "/admin/assignees": {
+        get: adminRoute("Admins assignables à un ticket", {
+          description: "Admins actifs (non bannis) : id, pseudo, nom affiché, avatar. Jamais d'email.",
         }),
       },
       "/admin/dev-tickets": {
@@ -1188,7 +1196,9 @@ export function buildOpenApiDocument() {
           params: [numericIdParam("id")],
           body: updateDevTicketSchema,
           ok: noContent,
-          description: "status : todo, in_progress, done ou closed. Inscrit au journal.",
+          description:
+            "status : todo, in_progress, done ou closed. " +
+            `assigneeIds : liste complète (remplace la précédente, ${TICKET_MAX_ASSIGNEES} au plus), admins actifs uniquement. Inscrit au journal.`,
         }),
         delete: adminRoute("Supprimer un ticket de développement", { params: [numericIdParam("id")], ok: noContent, description: "Inscrit au journal." }),
       },

@@ -32,6 +32,7 @@ import {
   updateUser,
   createDevTicket,
   getSupportBoard,
+  listAssignees,
   listDevTickets,
   removeDevTicket,
   updateDevTicket,
@@ -141,7 +142,7 @@ export function listTicketsController(request: Request) {
   });
 }
 
-// PATCH /api/v1/admin/tickets/[id] { status?, priority? }
+// PATCH /api/v1/admin/tickets/[id] { status?, priority?, assigneeIds? }
 export function updateTicketController(request: Request, { params }: Context) {
   return withAdmin(request, async (adminId) => {
     const id = ticketIdSchema.safeParse((await params).id);
@@ -155,6 +156,11 @@ export function updateTicketController(request: Request, { params }: Context) {
 // GET /api/v1/admin/tickets/board : Kanban du support.
 export function supportBoardController(request: Request) {
   return withAdmin(request, async () => json(await getSupportBoard()));
+}
+
+// GET /api/v1/admin/assignees : admins assignables à un ticket (Kanban).
+export function listAssigneesController(request: Request) {
+  return withAdmin(request, async () => json(await listAssignees()));
 }
 
 // GET /api/v1/admin/dev-tickets : Kanban du développement.
@@ -171,7 +177,7 @@ export function createDevTicketController(request: Request) {
   });
 }
 
-// PATCH /api/v1/admin/dev-tickets/[id] { title?, description?, status?, priority? }
+// PATCH /api/v1/admin/dev-tickets/[id] { title?, description?, status?, priority?, assigneeIds? }
 export function updateDevTicketController(request: Request, { params }: Context) {
   return withAdmin(request, async (adminId) => {
     const id = devTicketIdSchema.safeParse((await params).id);
