@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/Input";
 import { getRoughPosition, type GeolocationFailure, type RoughPosition } from "@/client/geolocation";
 import { TRIP_ENERGY_LEVELS, TRIP_PLACE_MAX, type TripEnergyLevel, type TripMessageContext } from "@/schemas/trip.schema";
 
-const ENERGY_ICONS: Record<TripEnergyLevel, IconName> = { tired: "bedtime", motivated: "bolt", relaxed: "spa" };
+// Partagées avec « Adapter ma journée » (TripCopilot).
+export const ENERGY_ICONS: Record<TripEnergyLevel, IconName> = { tired: "bedtime", motivated: "bolt", relaxed: "spa" };
 
 // « Que faire maintenant ? » : énergie, puis position GPS ou lieu écrit (l'un ou l'autre, tout est facultatif).
 // Rien n'est gardé après l'envoi : la position ne sert qu'à cette question.

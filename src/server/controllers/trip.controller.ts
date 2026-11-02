@@ -13,6 +13,7 @@ import {
   deleteTripTask,
   exportTripCalendar,
   exportTripPdf,
+  getCurrentTrip,
   getTrip,
   getTripMessages,
   listTrips,
@@ -32,6 +33,7 @@ import {
   createTripItemSchema,
   createTripSchema,
   createTripTaskSchema,
+  currentTripQuerySchema,
   dayParamSchema,
   idParamSchema,
   tripIdParamSchema,
@@ -49,6 +51,15 @@ type Params = Promise<Record<string, string | string[] | undefined>>;
 // GET /api/v1/trips
 export function listTripsController(request: Request) {
   return withUser(request, async (userId) => Response.json(await listTrips(userId)));
+}
+
+// GET /api/v1/trips/current?day=AAAA-MM-JJ
+export function getCurrentTripController(request: Request) {
+  return withUser(request, async (userId) => {
+    const query = currentTripQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
+    if (!query.success) return errorResponse(400, "INVALID_INPUT");
+    return Response.json({ current: await getCurrentTrip(userId, query.data.day) });
+  });
 }
 
 // POST /api/v1/trips
@@ -153,7 +164,8 @@ export function sendTripMessageController(request: Request, { params }: { params
       return errorResponse(429, "TOO_MANY_REQUESTS");
     }
 
-    return json({ messages: await sendTripMessage(userId, tripId, body.content, { position: body.position, place: body.place, energy: body.energy }) }, 201);
+    const { content, ...context } = body;
+    return json({ messages: await sendTripMessage(userId, tripId, content, context) }, 201);
   });
 }
 

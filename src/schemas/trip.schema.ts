@@ -23,6 +23,8 @@ export const TRIP_PLACE_MAX = 100;
 // Mêmes limites que trip_destination et trip.instructions (db/migrations).
 export const TRIP_MAX_DESTINATIONS = 8;
 export const TRIP_INSTRUCTIONS_MAX = 1000;
+// Mémoire du voyage retenue par Biirbou : même limite que trip.memory.
+export const TRIP_MEMORY_MAX = 600;
 
 const countryCode = z.string().regex(/^[A-Z]{2}$/);
 const stateCode = z.string().regex(/^[A-Za-z0-9-]{1,10}$/);
@@ -65,6 +67,13 @@ export const createTripSchema = z
 export const updateTripSchema = z
   .strictObject({
     title: z.string().trim().min(1).max(100),
+    // Mémoire de Biirbou corrigée par le voyageur ; vide : effacée.
+    memory: z
+      .string()
+      .trim()
+      .max(TRIP_MEMORY_MAX)
+      .transform((value) => value || null)
+      .nullable(),
     budgetTarget: euros.nullable(),
     budgetLodging: euros,
     budgetTransit: euros,
@@ -89,17 +98,19 @@ const coordinate = (limit: number) =>
     .max(limit)
     .transform((value) => Math.round(value * 100) / 100);
 
-// Où est le voyageur (« Que faire maintenant ? ») : GPS arrondi ou lieu écrit à la main, l'un ou l'autre. Jamais enregistré.
+// Contexte du moment, envoyé avec la question puis oublié (jamais enregistré) : heure de l'appareil ; pour « Que faire
+// maintenant ? », position GPS arrondie ou lieu écrit à la main (l'un ou l'autre) et énergie.
 export const sendTripMessageSchema = z
   .strictObject({
     content: z.string().trim().min(2).max(TRIP_MESSAGE_MAX),
+    // Heure de l'appareil avec son décalage (ex. 2026-11-02T14:05:00+09:00) : en voyage, l'heure locale du voyageur.
+    clientTime: z.iso.datetime({ offset: true }).optional(),
     position: z.strictObject({ latitude: coordinate(90), longitude: coordinate(180) }).optional(),
     place: z.string().trim().min(2).max(TRIP_PLACE_MAX).optional(),
     energy: z.enum(TRIP_ENERGY_LEVELS).optional(),
   })
   .refine((body) => !(body.position && body.place));
-// Contexte du moment, envoyé avec une question puis oublié.
-export type TripMessageContext = Pick<z.infer<typeof sendTripMessageSchema>, "position" | "place" | "energy">;
+export type TripMessageContext = Omit<z.infer<typeof sendTripMessageSchema>, "content">;
 
 export const answerTripSuggestionSchema = z.strictObject({
   accepted: z.boolean(),
@@ -124,6 +135,9 @@ export const updateTripItemSchema = z
   .strictObject({ ...tripItemFields, color: z.enum(TRIP_ITEM_COLORS).nullable() })
   .partial()
   .refine((changes) => Object.keys(changes).length > 0);
+
+// GET /api/v1/trips/current?day= : jour de l'appareil (en voyage, le jour local du voyageur).
+export const currentTripQuerySchema = z.strictObject({ day: isoDate });
 
 // GET /api/v1/trips/[id]/export/pdf?template=
 export const tripPdfQuerySchema = z.strictObject({ template: z.enum(TRIP_PDF_TEMPLATES).default("classic") });

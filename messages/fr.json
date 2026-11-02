@@ -4,7 +4,7 @@
   },
   "Metadata": {
     "title": "Biirb",
-    "description": "Blog et planificateur de voyage grâce aux posts et avis des voyageurs"
+    "description": "Biirb, votre copilote de voyage : un planning tiré des récits de la communauté, que Biirbou adapte avec vous avant et pendant le voyage."
   },
   "Navbar": {
     "brand": "Biirb",
@@ -45,7 +45,18 @@
     "searchClear": "Effacer la recherche",
     "heroLabel": "Bienvenue sur Biirb",
     "heroBrand": "Biirb.",
-    "heroTagline": "Un coup d'ailes sur un coup de cœur."
+    "heroTagline": "Un coup d'ailes sur un coup de cœur.",
+    "heroCopilot": "Planifiez à partir des récits des voyageurs, puis laissez Biirbou adapter votre voyage en route."
+  },
+  "CurrentTrip": {
+    "during": "En voyage · jour {day} sur {total}",
+    "upcoming": "Prochain voyage · {days, plural, =0 {départ aujourd'hui} one {départ demain} other {départ dans # jours}}",
+    "today": "Au programme aujourd'hui",
+    "empty": "Rien de prévu aujourd'hui : demandez une idée à Biirbou.",
+    "more": "{count, plural, one {et # autre activité} other {et # autres activités}}",
+    "adapt": "Adapter ma journée",
+    "prepare": "Préparer avec Biirbou",
+    "open": "Voir le programme"
   },
   "BackToTop": {
     "label": "Revenir en haut de la page"
@@ -56,9 +67,9 @@
     "plan": "Planifier un voyage",
     "trendingTitle": "Destinations tendance",
     "postCount": "{count, plural, one {# récit} other {# récits}}",
-    "plannerTitle": "Planifiez votre prochain voyage",
-    "plannerText": "Biirbou s'appuie sur les récits de la communauté pour vous proposer un planning jour par jour.",
-    "plannerCta": "Commencer"
+    "plannerTitle": "Votre copilote de voyage",
+    "plannerText": "Biirbou compose votre planning à partir des récits de la communauté, puis l'adapte avec vous pendant le voyage : pluie, fatigue, retard ou lieu fermé.",
+    "plannerCta": "Partir avec Biirbou"
   },
   "Profile": {
     "metaTitle": "Mon profil",
@@ -360,7 +371,7 @@
     },
     "metaTitle": "Planificateur",
     "heading": "Mes voyages",
-    "subheading": "Choisissez une destination, vos dates et votre style de voyage : Biirbou compose un planning à partir des récits de la communauté.",
+    "subheading": "Choisissez une destination, vos dates et votre style de voyage : Biirbou compose un planning à partir des récits de la communauté, puis reste votre copilote pendant le séjour pour l'adapter au moindre imprévu.",
     "create": {
       "title": "Nouveau voyage",
       "submit": "Planifier mon voyage avec Biirbou",
@@ -385,7 +396,7 @@
       "quota": "{count, plural, =0 {Biirbou a fini sa journée : il revient demain !} one {Biirbou peut encore vous aider # fois aujourd'hui.} other {Biirbou peut encore vous aider # fois aujourd'hui.}}"
     },
     "list": {
-      "title": "Voyages générés",
+      "title": "Vos voyages avec Biirbou",
       "empty": "Aucun voyage pour l'instant. Planifiez votre premier voyage ci-dessus.",
       "activities": "{count, plural, =0 {Aucune activité} one {# activité} other {# activités}}",
       "loadError": "Impossible de charger vos voyages. Réessayez."
@@ -456,7 +467,8 @@
         "message": "Biirbou remplace les activités de ce jour ; les autres jours ne changent pas. Vous pourrez annuler pendant {hours} h.",
         "action": "Re-générer"
       },
-      "maps": "Itinéraire du jour"
+      "maps": "Itinéraire du jour",
+      "today": "Aujourd'hui"
     },
     "item": {
       "edit": "Modifier l'activité {title}",
@@ -501,8 +513,6 @@
       "saved": "Budget enregistré."
     },
     "chat": {
-      "title": "Discuter avec Biirbou",
-      "hint": "Une envie, une question ? Biirbou vous dit où et quand la caser, à partir des récits de la communauté, et peut réorganiser votre voyage (ajouter, déplacer, remplacer ou retirer des activités). Rien ne change sans votre accord.",
       "empty": "Ex. « Je veux faire du parachute », « Un resto typique pas cher le jour 2 ? », « Que faire s'il pleut ? »",
       "label": "Message pour Biirbou",
       "placeholder": "Votre question sur ce voyage…",
@@ -803,6 +813,11 @@
         "TOO_MANY_REQUESTS": "Trop de modifications d'un coup. Réessayez dans quelques minutes.",
         "INTERNAL_ERROR": "Une erreur est survenue. Réessayez plus tard.",
         "TRIP_FULL": "Ce voyage est complet : 10 voyageurs maximum, membres compris."
+      },
+      "display": {
+        "label": "Afficher les comptes en",
+        "hint": "Chaque dépense au taux BCE du jour où elle a été payée. Les comptes de référence restent en {currency}.",
+        "settleHint": "Pour marquer un remboursement, affichez les comptes en {currency} : c'est la devise de référence du voyage."
       }
     },
     "offline": "Hors ligne : vous consultez la dernière version enregistrée sur cet appareil. Les modifications reviendront avec le réseau.",
@@ -835,6 +850,81 @@
         "maps": "L'itinéraire Google Maps de chaque jour fait partie du pass voyage.",
         "ai": "Biirbou a fini sa journée. Avec le pass voyage, il peut vous aider bien plus souvent chaque jour sur ce voyage.",
         "chat": "Vous avez atteint la limite de messages de ce voyage. Le pass voyage la multiplie par 4."
+      }
+    },
+    "origin": {
+      "post": "Récit de la communauté",
+      "ai": "Suggestion de Biirbou",
+      "aiHint": "Proposée par Biirbou à partir de ses connaissances : horaires, prix et accès sont à vérifier.",
+      "manual": "Ajout manuel"
+    },
+    "copilot": {
+      "title": "Biirbou, votre copilote",
+      "cardText": {
+        "before": "Avant le départ comme sur place, Biirbou ajuste votre voyage : une envie, une question, un imprévu, il trouve où et quand le caser. Rien ne change sans votre accord.",
+        "during": "Vous êtes en voyage : Biirbou connaît votre journée. Pluie, fatigue, retard ou lieu fermé, il réorganise le programme avec vous.",
+        "after": "Votre voyage est terminé : Biirbou peut encore vous aider à préparer la suite."
+      },
+      "open": "Discuter avec Biirbou",
+      "adaptTrip": "Adapter mon voyage",
+      "adaptToday": "Adapter ma journée",
+      "adaptDay": "Adapter cette journée",
+      "launcher": "Biirbou",
+      "panelLabel": "Biirbou, votre copilote de voyage",
+      "close": "Fermer Biirbou",
+      "askItem": "Demander à Biirbou à propos de {title}",
+      "askBudget": "Mon budget avec Biirbou",
+      "prefill": {
+        "item": "À propos de « {title} » (jour {number}, {time}) : ",
+        "budget": "Où en est mon budget et que me conseilles-tu pour la suite du voyage ?"
+      },
+      "adapt": {
+        "title": "Que se passe-t-il le jour {number} ({date}) ?",
+        "dismiss": "Fermer le choix de l'imprévu",
+        "reasonsLabel": "Imprévus",
+        "message": "Imprévu le jour {number} ({date}) : {reason}. Adapte cette journée en gardant ce qui n'est pas touché.",
+        "reasons": {
+          "rain": {
+            "label": "Il pleut",
+            "text": "il pleut, je préfère des activités à l'abri"
+          },
+          "tired": {
+            "label": "Je suis fatigué·e",
+            "text": "je suis fatigué·e et je veux lever le pied"
+          },
+          "late": {
+            "label": "J'ai du retard",
+            "text": "j'ai pris du retard sur le programme"
+          },
+          "closed": {
+            "label": "Un lieu est fermé",
+            "text": "un lieu prévu est fermé"
+          },
+          "budget": {
+            "label": "Budget serré",
+            "text": "je dois dépenser moins que prévu"
+          },
+          "other": {
+            "label": "Autre",
+            "text": "(décrivez ce qui change)"
+          }
+        }
+      },
+      "context": {
+        "title": "Biirbou sait que…",
+        "trip": "Votre voyage : {places}, {dates}, {travelers, plural, one {# voyageur} other {# voyageurs}}.",
+        "before": "Le départ est dans {days, plural, =0 {moins d'un jour} one {# jour} other {# jours}}.",
+        "during": "Vous êtes au jour {day} sur {total} : {count, plural, =0 {rien de prévu aujourd'hui} one {# activité prévue aujourd'hui} other {# activités prévues aujourd'hui}}.",
+        "after": "Votre voyage est terminé.",
+        "budget": "Budget prévu : {planned} · déjà dépensé : {spent}.",
+        "wishes": "Il garde en tête les envies données à la création du voyage.",
+        "plan": "Il voit tout votre programme ({count, plural, =0 {aucune activité} one {# activité} other {# activités}}), y compris vos modifications."
+      },
+      "memory": {
+        "title": "Ce que Biirbou a retenu",
+        "empty": "Rien pour l'instant. Dites-lui vos contraintes (allergie, rythme, mobilité, budget…) : il s'en souviendra pour ce voyage.",
+        "edit": "Corriger",
+        "clear": "Effacer"
       }
     }
   },

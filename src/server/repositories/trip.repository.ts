@@ -40,6 +40,8 @@ export type TripRow = Omit<TripSummary, "item_count" | "role" | "owner_name"> & 
   destinations: TripDestinationRow[];
   instructions: string | null;
   traveler_count: number;
+  // Mémoire du voyage (contraintes retenues par Biirbou), null : rien retenu.
+  memory: string | null;
   // Villes où séjourne le voyageur (carte) : vide pour un voyage généré avant la carte.
   stops: TripStopRow[];
 };
@@ -55,8 +57,12 @@ export type TripItemRow = {
   category: TripItemCategory;
   // null : couleur de la catégorie.
   color: TripItemColor | null;
+  // Proposée par Biirbou ou saisie à la main.
+  origin: TripItemOrigin;
   source_post: { id: number; title: string; slug: string } | null;
 };
+
+export type TripItemOrigin = "ai" | "manual";
 
 export type TripTaskRow = { id: number; label: string; detail: string | null; done: boolean };
 
@@ -83,6 +89,7 @@ export type TripPlan = {
 
 export type TripChanges = Partial<{
   title: string;
+  memory: string | null;
   budget_target: number | null;
   budget_lodging: number;
   budget_transit: number;
@@ -98,14 +105,14 @@ export type TripItemFields = {
   category: TripItemCategory;
 };
 
-export type TripItemChanges = Partial<TripItemFields & { color: TripItemColor | null }>;
+export type TripItemChanges = Partial<TripItemFields & { color: TripItemColor | null; origin: TripItemOrigin }>;
 
 export type TripTaskChanges = Partial<{ label: string; done: boolean }>;
 
 export type TripSuggestionStatus = "pending" | "accepted" | "rejected";
 
 // update / delete : target = activité visée telle qu'elle est maintenant (null si supprimée entre-temps).
-export type TripSuggestionRow = Omit<TripItemRow, "color"> & {
+export type TripSuggestionRow = Omit<TripItemRow, "color" | "origin"> & {
   status: TripSuggestionStatus;
   action: TripSuggestionAction;
   target: { id: number; day: string; start_time: string; title: string } | null;
@@ -130,8 +137,8 @@ export type NewTripExchange = {
 };
 
 // Noms de colonnes issus de cette liste, jamais de l'entrée utilisateur.
-const TRIP_COLUMNS = ["title", "budget_target", "budget_lodging", "budget_transit", "budget_dining", "budget_activities"] as const;
-const ITEM_COLUMNS = ["day", "start_time", "title", "description", "category", "color"] as const;
+const TRIP_COLUMNS = ["title", "memory", "budget_target", "budget_lodging", "budget_transit", "budget_dining", "budget_activities"] as const;
+const ITEM_COLUMNS = ["day", "start_time", "title", "description", "category", "color", "origin"] as const;
 const TASK_COLUMNS = ["label", "done"] as const;
 
 const TRIP_SUMMARY_COLUMNS = `t.public_id as id, t.title, t.destination_country_code, t.destination_state_code, t.destination_city,
@@ -139,7 +146,7 @@ const TRIP_SUMMARY_COLUMNS = `t.public_id as id, t.title, t.destination_country_
   (select count(*)::int from trip_destination d where d.trip_id = t.id) as destination_count`;
 
 // Postgres renvoie « HH:MM:SS ».
-const ITEM_COLUMNS_SELECT = `i.id, i.day, to_char(i.start_time, 'HH24:MI') as start_time, i.title, i.description, i.category, i.color,
+const ITEM_COLUMNS_SELECT = `i.id, i.day, to_char(i.start_time, 'HH24:MI') as start_time, i.title, i.description, i.category, i.color, i.origin,
   case when p.id is null then null else json_build_object('id', p.id, 'title', p.title, 'slug', p.slug) end as source_post`;
 
 // Clé interne (suite du traitement) et identifiant public (renvoyé au client). Voyage et étapes dans une transaction.
@@ -215,7 +222,7 @@ export async function findTripById(id: number): Promise<TripRow | null> {
   const db = await getDb();
   const { rows } = await db.query<TripRow>(
     `select ${TRIP_SUMMARY_COLUMNS}, t.user_id, t.archetype_id, t.budget_lodging, t.budget_transit, t.budget_dining,
-       t.budget_activities, t.budget_target, t.source_post_count, t.generated_at, t.season_note, t.instructions, t.traveler_count,
+       t.budget_activities, t.budget_target, t.source_post_count, t.generated_at, t.season_note, t.instructions, t.traveler_count, t.memory,
        coalesce(
          (select json_agg(json_build_object('name', s.name, 'country_code', s.country_code, 'latitude', s.latitude,
                    'longitude', s.longitude, 'start_day', s.start_day, 'end_day', s.end_day) order by s.position)
@@ -375,8 +382,8 @@ export async function replaceTripDayItems(tripId: number, day: string, items: Tr
 export async function insertTripItem(tripId: number, item: TripItemFields): Promise<number> {
   const db = await getDb();
   const { rows } = await db.query<{ id: number }>(
-    `insert into trip_item (trip_id, day, start_time, title, description, category)
-     values ($1, $2, $3, $4, $5, $6)
+    `insert into trip_item (trip_id, day, start_time, title, description, category, origin)
+     values ($1, $2, $3, $4, $5, $6, 'manual')
      returning id`,
     [tripId, item.day, item.start_time, item.title, item.description, item.category],
   );
@@ -570,7 +577,7 @@ async function applySuggestion(
   const { rowCount } = await client.query(
     `update trip_item i
      set day = s.day, start_time = s.start_time, title = s.title, description = s.description, category = s.category,
-       source_post_id = s.source_post_id
+       source_post_id = s.source_post_id, origin = 'ai'
      from trip_suggestion s
      where s.id = $1 and i.id = $2 and i.trip_id = $3`,
     [suggestionId, targetId, tripId],
@@ -581,8 +588,8 @@ async function applySuggestion(
 // Historique des changements de Biirbou (trip_plan_change) : photo avant, empreinte après, restauration par « Annuler ».
 // Contenu seulement (jamais les ids) : un planning restauré a de nouveaux ids mais la même empreinte.
 const PLAN_ITEMS = `coalesce((select json_agg(json_build_object('day', i.day, 'start_time', i.start_time, 'title', i.title,
-    'description', i.description, 'category', i.category, 'source_post_id', i.source_post_id, 'color', i.color)
-    order by i.day, i.start_time, i.title, i.description, i.category, i.color, i.source_post_id)
+    'description', i.description, 'category', i.category, 'source_post_id', i.source_post_id, 'color', i.color, 'origin', i.origin)
+    order by i.day, i.start_time, i.title, i.description, i.category, i.color, i.source_post_id, i.origin)
   from trip_item i where i.trip_id = $1), '[]'::json)`;
 const PLAN_TASKS = `coalesce((select json_agg(json_build_object('label', t.label, 'detail', t.detail, 'done', t.done) order by t.id)
   from trip_task t where t.trip_id = $1), '[]'::json)`;
@@ -668,12 +675,15 @@ export async function undoLastPlanChange(tripId: number): Promise<"undone" | "no
 
     // Récit supprimé depuis : l'activité restaurée perd seulement son lien (comme le on delete set null de trip_item).
     await client.query("delete from trip_item where trip_id = $1", [tripId]);
+    // Photo prise avant la provenance des activités : origin absent, activité de Biirbou.
     await client.query(
-      `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, color)
-       select $1, x.day, x.start_time, x.title, x.description, x.category, (select p.id from post p where p.id = x.source_post_id), x.color
+      `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, color, origin)
+       select $1, x.day, x.start_time, x.title, x.description, x.category, (select p.id from post p where p.id = x.source_post_id), x.color,
+         coalesce(x.origin, 'ai')
        from trip_plan_change c,
          jsonb_to_recordset(c.snapshot -> 'items')
-           as x (day date, start_time time, title varchar, description varchar, category trip_item_category, source_post_id int, color varchar)
+           as x (day date, start_time time, title varchar, description varchar, category trip_item_category, source_post_id int, color varchar,
+             origin trip_item_origin)
        where c.id = $2`,
       [tripId, change.id],
     );

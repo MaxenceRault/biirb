@@ -234,6 +234,24 @@ export async function updateTripCurrency(tripId: number, currency: string): Prom
   return rowCount === 1;
 }
 
+// Copilote : dépensé par catégorie dans la devise du voyage (unités mineures), remboursements exclus.
+export async function findSpendingByCategory(tripId: number): Promise<{ currency: string; byCategory: Record<string, number> } | null> {
+  const db = await getDb();
+  const { rows } = await db.query<{ currency: string; by_category: Record<string, string> }>(
+    `select t.currency,
+       coalesce((select json_object_agg(x.category, x.total)
+                   from (select e.category, sum(e.base_amount_minor) as total from trip_expense e
+                          where e.trip_id = t.id and not e.is_reimbursement group by e.category) x), '{}') as by_category
+     from trip t where t.id = $1`,
+    [tripId],
+  );
+  if (!rows[0]) return null;
+  return {
+    currency: rows[0].currency,
+    byCategory: Object.fromEntries(Object.entries(rows[0].by_category).map(([category, total]) => [category, Number(total)])),
+  };
+}
+
 export async function findTripCurrency(tripId: number): Promise<string | null> {
   const db = await getDb();
   const { rows } = await db.query<{ currency: string }>("select currency from trip where id = $1", [tripId]);

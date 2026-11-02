@@ -24,6 +24,7 @@ import {
   expenseSchema,
   participantSchema,
   paymentTaskSchema,
+  ledgerQuerySchema,
   settlementSchema,
   tripCurrencySchema,
   updatePaymentTaskSchema,
@@ -33,8 +34,11 @@ import { logError } from "@/server/logger";
 type Params = Promise<Record<string, string | string[] | undefined>>;
 type RouteParams = Record<string, string | string[] | undefined>;
 
-// GET /api/v1/trips/[id]/expenses : participants, dépenses, soldes, équilibrage, checklist « à payer »
-export const getLedgerController = route((userId, tripId) => getLedger(userId, tripId), { write: false });
+// GET /api/v1/trips/[id]/expenses[?display=JPY] : participants, dépenses, soldes, équilibrage, checklist « à payer »
+export const getLedgerController = route(
+  (userId, tripId, _params, query) => getLedger(userId, tripId, (query as z.infer<typeof ledgerQuerySchema>).display),
+  { query: ledgerQuerySchema, write: false },
+);
 
 // POST /api/v1/trips/[id]/expenses
 export const createExpenseController = route(
@@ -106,7 +110,8 @@ function id(value: RouteParams[string]) {
 // JWT revérifié (en plus de proxy.ts), id du voyage et corps validés, réponse = registre des dépenses à jour.
 function route(
   handler: (userId: string, tripId: number, routeParams: RouteParams, body: unknown) => Promise<unknown>,
-  options: { schema?: z.ZodType; status?: number; write?: boolean } = {},
+  // query : paramètres d'URL validés, passés au handler à la place du corps (GET).
+  options: { schema?: z.ZodType; query?: z.ZodType; status?: number; write?: boolean } = {},
 ) {
   return async (request: Request, { params }: { params: Params }) => {
     const userId = await getUserIdFromRequest(request);
@@ -122,6 +127,11 @@ function route(
     if (!tripId.success) return errorResponse(400, "INVALID_INPUT");
 
     let body: unknown;
+    if (options.query) {
+      const parsed = options.query.safeParse(Object.fromEntries(new URL(request.url).searchParams));
+      if (!parsed.success) return errorResponse(400, "INVALID_INPUT");
+      body = parsed.data;
+    }
     if (options.schema) {
       const parsed = options.schema.safeParse(await request.json().catch(() => null));
       if (!parsed.success) return errorResponse(400, "INVALID_INPUT");
