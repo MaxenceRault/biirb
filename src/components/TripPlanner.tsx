@@ -855,6 +855,7 @@ function DayPlanner({
         </ol>
         {legs.length > 0 && <TravelCredit />}
         {travel?.unavailable && <p className="text-label-sm text-ink-soft">{t("travel.unavailable")}</p>}
+        {travel?.travel?.deferred && <p className="text-label-sm text-ink-soft">{t("travel.deferred")}</p>}
 
         {!canEdit ? null : adding ? (
           <ItemForm

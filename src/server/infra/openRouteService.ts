@@ -34,14 +34,25 @@ export class RoutingUnavailableError extends Error {}
 async function call(path: string, init: RequestInit) {
   const config = getRoutingConfig();
   if (!config) throw new RoutingUnavailableError("ORS_API_KEY absente");
+  // Délai dépassé, réseau, quota (429), panne ou réponse illisible : indisponible, jamais une erreur 500.
   const response = await fetch(`${API}${path}`, {
     ...init,
     headers: { ...init.headers, Authorization: config.apiKey, Accept: "application/json" },
     signal: AbortSignal.timeout(TIMEOUT_MS),
+  }).catch((error: unknown) => {
+    throw new RoutingUnavailableError(`OpenRouteService injoignable : ${error instanceof Error ? error.name : "inconnu"}`);
   });
-  // Quota dépassé (429) ou panne : le voyage s'affiche sans trajets.
   if (!response.ok) throw new RoutingUnavailableError(`OpenRouteService ${response.status}`);
-  return response.json();
+  return response.json().catch(() => {
+    throw new RoutingUnavailableError("OpenRouteService : réponse illisible");
+  });
+}
+
+// Réponse hors format : traitée comme une panne (service externe, non fiable).
+function parse<T>(schema: z.ZodType<T>, data: unknown): T {
+  const parsed = schema.safeParse(data);
+  if (!parsed.success) throw new RoutingUnavailableError("OpenRouteService : réponse hors format");
+  return parsed.data;
 }
 
 // Lieux d'un nom, autour d'un point et dans un pays (ISO 3166-1 alpha-2). Le choix du bon résultat revient au service.
@@ -56,7 +67,7 @@ export async function searchPlaces(text: string, { near, country }: { near: GeoP
     "boundary.circle.radius": String(SEARCH_RADIUS_KM),
     "boundary.country": country,
   });
-  const { features } = searchSchema.parse(await call(`/geocode/search?${params}`, { method: "GET" }));
+  const { features } = parse(searchSchema, await call(`/geocode/search?${params}`, { method: "GET" }));
   return features.map(({ geometry, properties }) => ({
     name: properties.name,
     layer: properties.layer,
@@ -75,7 +86,8 @@ export async function travelLegs(pairs: [GeoPoint, GeoPoint][], profile: TravelP
     destinations: pairs.map((_, index) => index * 2 + 1),
     metrics: ["duration", "distance"],
   };
-  const { durations, distances } = matrixSchema.parse(
+  const { durations, distances } = parse(
+    matrixSchema,
     await call(`/v2/matrix/${profile}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   );
   // Ligne i = départ i, colonne i = son arrivée : le tronçon i est sur la diagonale.

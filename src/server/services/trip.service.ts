@@ -304,6 +304,11 @@ function freeSlot(items: TripItemRow[], day: string, time: string): FreeSlot {
   };
 }
 
+// Jour du voyage en cours à la destination (null : avant, après) : prioritaire pour les temps de trajet.
+export function liveTripDay(trip: TripRow, items: TripItemRow[]) {
+  return tripLocalNow(trip, items)?.day ?? null;
+}
+
 function liveDay(now: TripLocalNow | null) {
   return now && { day: now.day, dayNumber: now.dayNumber };
 }

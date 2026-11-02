@@ -5,7 +5,8 @@ import { apiFetch } from "@/client/session";
 
 export type TravelDuration = { minutes: number; meters: number };
 export type TravelLeg = { fromItemId: number; toItemId: number; walk: TravelDuration | null; drive: TravelDuration | null };
-export type DayTravel = { legs: TravelLeg[]; unlocated: number[]; pending: number[] };
+// deferred : plafond du site atteint ou service indisponible, une partie des trajets viendra plus tard.
+export type DayTravel = { legs: TravelLeg[]; unlocated: number[]; pending: number[]; deferred: boolean };
 
 // Recherches de lieux limitées par appel côté serveur : la suite est demandée aussitôt, quelques fois au plus.
 const MAX_FOLLOW_UPS = 3;
@@ -14,8 +15,8 @@ const MAX_FOLLOW_UPS = 3;
 // les trajets connus restent affichés le temps du recalcul. Durées et ids seulement, rien de personnel.
 const lastByDay = new Map<string, { itemsKey: string; travel: DayTravel }>();
 
-// Trajets d'une journée (pass voyage), recalculés quand ses activités changent (itemsKey). unavailable : service
-// indisponible (quota, panne) ; le planning s'affiche alors sans trajets.
+// Trajets d'une journée (pass voyage), recalculés quand ses activités changent (itemsKey). unavailable : fonction
+// coupée (clé absente) ; le planning s'affiche alors sans trajets.
 export function useDayTravel(tripId: string, day: string, itemsKey: string, enabled: boolean) {
   const dayKey = `${tripId}|${day}`;
   const [state, setState] = useState<{ dayKey: string; itemsKey: string; travel: DayTravel | null; unavailable: boolean } | null>(null);
@@ -31,11 +32,13 @@ export function useDayTravel(tripId: string, day: string, itemsKey: string, enab
       if (!("data" in result)) return setState({ dayKey, itemsKey, travel: null, unavailable: result.error === "TRAVEL_UNAVAILABLE" });
       lastByDay.set(dayKey, { itemsKey, travel: result.data });
       setState({ dayKey, itemsKey, travel: result.data, unavailable: false });
-      if (result.data.pending.length > 0 && followUps++ < MAX_FOLLOW_UPS) await load();
+      // En attente à cause du plafond : redemander tout de suite heurterait la même limite.
+      if (!result.data.deferred && result.data.pending.length > 0 && followUps++ < MAX_FOLLOW_UPS) await load();
     }
 
-    // Déjà à jour pour ces activités : pas d'appel.
-    if (lastByDay.get(dayKey)?.itemsKey !== itemsKey) void load();
+    // Déjà complet pour ces activités : pas d'appel. Une journée en attente est redemandée en y revenant.
+    const last = lastByDay.get(dayKey);
+    if (last?.itemsKey !== itemsKey || last.travel.deferred || last.travel.pending.length > 0) void load();
     return () => {
       cancelled = true;
     };

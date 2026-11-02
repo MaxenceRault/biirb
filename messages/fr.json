@@ -477,7 +477,8 @@
       "minutes": "{minutes} min",
       "hours": "{hours} h {minutes}",
       "credit": "Trajets estimés à pied et en voiture, sans transports en commun ni trafic · <ors>© openrouteservice.org</ors> · <osm>© OpenStreetMap</osm>",
-      "unavailable": "Temps de trajet indisponibles pour le moment."
+      "unavailable": "Temps de trajet indisponibles pour le moment.",
+      "deferred": "Certains temps de trajet arriveront plus tard."
     },
     "item": {
       "edit": "Modifier l'activité {title}",

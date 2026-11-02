@@ -657,7 +657,9 @@ export function buildOpenApiDocument() {
             description:
               "OpenRouteService (OpenStreetMap) : à pied, et en voiture au-delà de 2 km ; pas de transports en commun. Chaque lieu est " +
               "cherché une fois (nom donné par Biirbou, sinon titre) puis gardé ; un transport coupe la journée. Lecteur compris. " +
-              "unlocated : lieu introuvable ; pending : pas encore cherché (8 recherches par appel, la suite au prochain).",
+              "unlocated : lieu introuvable ; pending : pas encore cherché (8 recherches par appel, la suite au prochain). " +
+              "deferred : plafond du site atteint (ORS_*_MAX, réserve pour le jour en cours d'un voyage en cours) ou " +
+              "OpenRouteService indisponible : les trajets en cache sont renvoyés, les autres attendent le prochain affichage.",
             ok: {
               200: json("Trajets du jour", {
                 type: "object",
@@ -676,11 +678,12 @@ export function buildOpenApiDocument() {
                   },
                   unlocated: { type: "array", items: { type: "integer" } },
                   pending: { type: "array", items: { type: "integer" } },
+                  deferred: { type: "boolean" },
                 },
               }),
               402: passRequired,
               429: tooManyRequests,
-              503: error("OpenRouteService indisponible (quota, panne)", ["TRAVEL_UNAVAILABLE"]),
+              503: error("Temps de trajet coupés (clé OpenRouteService absente)", ["TRAVEL_UNAVAILABLE"]),
             },
           }),
           parameters: [tripIdParam, { name: "day", in: "path", required: true, schema: { type: "string", format: "date" } }],

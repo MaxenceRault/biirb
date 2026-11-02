@@ -320,25 +320,42 @@ export function getAnalyticsConfig(): AnalyticsConfig | null {
 }
 
 // Temps de trajet (OpenRouteService, pass voyage) : clé absente ou invalide, seuls les trajets sont coupés.
-const routingSchema = z.object({ ORS_API_KEY: z.string().regex(/^[A-Za-z0-9+/=_-]{20,200}$/) });
+// Plafonds de tout le site, sous le quota du plan gratuit (3 000 recherches et 500 calculs par jour ; 100 et 40 par
+// minute) : 10 % de marge, les compteurs étant en mémoire (remis à zéro au redémarrage, pas chez OpenRouteService).
+const routingSchema = z.object({
+  ORS_API_KEY: z.string().regex(/^[A-Za-z0-9+/=_-]{20,200}$/),
+  ORS_GEOCODE_DAILY_MAX: count.default(2_700),
+  ORS_GEOCODE_MINUTE_MAX: count.default(90),
+  ORS_MATRIX_DAILY_MAX: count.default(450),
+  ORS_MATRIX_MINUTE_MAX: count.default(36),
+});
 
-export type RoutingConfig = { apiKey: string };
+export type RoutingBudget = { daily: number; perMinute: number };
+export type RoutingConfig = { apiKey: string; budget: { geocode: RoutingBudget; matrix: RoutingBudget } };
 
 let routing: RoutingConfig | null | undefined;
 
 export function getRoutingConfig(): RoutingConfig | null {
   if (routing !== undefined) return routing;
 
-  const { ORS_API_KEY } = process.env;
+  const { ORS_API_KEY, ORS_GEOCODE_DAILY_MAX, ORS_GEOCODE_MINUTE_MAX, ORS_MATRIX_DAILY_MAX, ORS_MATRIX_MINUTE_MAX } = process.env;
   if (!ORS_API_KEY) return (routing = null);
 
-  const parsed = routingSchema.safeParse({ ORS_API_KEY });
+  const parsed = routingSchema.safeParse({ ORS_API_KEY, ORS_GEOCODE_DAILY_MAX, ORS_GEOCODE_MINUTE_MAX, ORS_MATRIX_DAILY_MAX, ORS_MATRIX_MINUTE_MAX });
   if (!parsed.success) {
-    // Jamais la valeur dans le log.
-    logError("config", "invalid routing env (travel times disabled): ORS_API_KEY");
+    // Noms des variables seulement, jamais la valeur de la clé.
+    const names = parsed.error.issues.map((issue) => issue.path.join(".")).join(", ");
+    logError("config", `invalid routing env (travel times disabled): ${names}`);
     return (routing = null);
   }
-  return (routing = { apiKey: parsed.data.ORS_API_KEY });
+  const env = parsed.data;
+  return (routing = {
+    apiKey: env.ORS_API_KEY,
+    budget: {
+      geocode: { daily: env.ORS_GEOCODE_DAILY_MAX, perMinute: env.ORS_GEOCODE_MINUTE_MAX },
+      matrix: { daily: env.ORS_MATRIX_DAILY_MAX, perMinute: env.ORS_MATRIX_MINUTE_MAX },
+    },
+  });
 }
 
 // Base des liens absolus des métadonnées (og:url) : sans APP_URL, Next se rabat sur localhost.
