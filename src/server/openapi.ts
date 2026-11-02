@@ -591,7 +591,10 @@ export function buildOpenApiDocument() {
       },
       "/trips/{id}": {
         get: tripRoute("Détail d'un voyage", {}),
-        patch: tripRoute("Modifier le titre ou le budget", { body: updateTripSchema }),
+        patch: tripRoute("Modifier le titre, le budget ou la mémoire de Biirbou", {
+          body: updateTripSchema,
+          description: "memory : ce que Biirbou a retenu de la discussion, corrigé ou effacé (chaîne vide) ; filtrée contre l'injection (400 INSTRUCTIONS_REJECTED).",
+        }),
         delete: tripRoute("Supprimer un voyage", { ok: { 204: { description: "Supprimé" } } }),
       },
       "/trips/{id}/regenerate": {
@@ -642,6 +645,36 @@ export function buildOpenApiDocument() {
           parameters: [tripIdParam, { name: "day", in: "path", required: true, schema: { type: "string", format: "date" } }],
         },
       },
+      "/trips/current": {
+        get: {
+          tags: ["Voyages"],
+          summary: "Voyage en cours (accueil)",
+          description:
+            "Le voyage dont les dates englobent day (jour de l'appareil), avec ses activités de ce jour ; sinon le prochain voyage (sans activités). " +
+            "current null : aucun voyage en cours ni à venir.",
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "day", in: "query", required: true, schema: { type: "string", format: "date" } }],
+          responses: {
+            200: json("Voyage en cours ou à venir", {
+              type: "object",
+              properties: {
+                current: {
+                  type: "object",
+                  nullable: true,
+                  properties: {
+                    status: { type: "string", enum: ["during", "upcoming"] },
+                    trip: { type: "object" },
+                    items: { type: "array", items: { type: "object" } },
+                  },
+                },
+              },
+            }),
+            400: error("day absent ou invalide", ["INVALID_INPUT"]),
+            401: unauthorized,
+            500: internalError,
+          },
+        },
+      },
       "/trips/{id}/export/pdf": {
         get: withQuery(tripRoute("Télécharger le planning en PDF (pass voyage)", {
           description: "template : classic (planning à la suite), table (A4 paysage, jours en colonnes, cases colorées) ou booklet (A5, une page par jour).",
@@ -672,7 +705,9 @@ export function buildOpenApiDocument() {
           },
           description:
             "Limitée au voyage et à sa destination (hors sujet : off_topic, aucune proposition). Message traité comme " +
-            "une donnée non fiable. Les activités proposées restent en attente jusqu'à la réponse de l'utilisateur.",
+            "une donnée non fiable. Les activités proposées restent en attente jusqu'à la réponse de l'utilisateur. " +
+            "clientTime (heure de l'appareil avec décalage, ignorée si elle s'écarte de plus de 15 min de l'heure du serveur) : " +
+            "Biirbou sait quel jour du voyage on est. Le prompt contient aussi le budget, les dépenses et la mémoire du voyage, mise à jour après l'échange.",
         }),
       },
       "/trips/{id}/suggestions/{suggestionId}": {
@@ -743,7 +778,16 @@ export function buildOpenApiDocument() {
         }),
       },
       "/trips/{id}/expenses": {
-        get: tripRoute("Dépenses partagées (registre complet)", { ok: { 200: tripLedger } }),
+        get: withQuery(
+          tripRoute("Dépenses partagées (registre complet)", {
+            ok: { 200: tripLedger, 503: error("Taux de change indisponible", ["RATE_UNAVAILABLE"]) },
+            description:
+              "display : devise d'affichage, parmi displayCurrencies (celle du voyage et celles des dépenses). Chaque dépense est " +
+              "convertie au taux BCE du jour où elle a été payée (montant exact si elle a été payée dans cette devise) ; totaux, " +
+              "soldes, équilibrage et budget sont alors dans cette devise. Budget prévu (en euros) : dernier taux.",
+          }),
+          [{ name: "display", in: "query", schema: { type: "string", example: "JPY" } }],
+        ),
         post: tripRoute("Ajouter une dépense", {
           body: expenseSchema,
           description:

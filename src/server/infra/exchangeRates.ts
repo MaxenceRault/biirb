@@ -26,3 +26,22 @@ export async function getExchangeRate(from: string, to: string, date: string): P
   cache.set(key, { rate, expiresAt: Date.now() + CACHE_MS });
   return rate;
 }
+
+// Un jour passé ne change plus : gardé jusqu'au redémarrage (une table par jour de dépense, quelques Ko).
+const euroTables = new Map<string, { rates: Record<string, number>; expiresAt: number }>();
+
+// Table du jour donné en base euro : unités de chaque devise pour 1 €, toutes devises de la BCE en un seul appel.
+// Une conversion A → B ce jour-là vaut table[B] / table[A], sans enregistrer de taux par dépense.
+export async function getEuroRates(date: string): Promise<Record<string, number>> {
+  const today = new Date().toISOString().slice(0, 10);
+  const day = date >= today ? "latest" : date;
+  const cached = euroTables.get(day);
+  if (cached && cached.expiresAt > Date.now()) return cached.rates;
+
+  const response = await fetch(`${API}/${day}?from=EUR`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`Frankfurter ${response.status}`);
+  const rates = { ...responseSchema.parse(await response.json()).rates, EUR: 1 };
+
+  euroTables.set(day, { rates, expiresAt: day === "latest" ? Date.now() + CACHE_MS : Number.POSITIVE_INFINITY });
+  return rates;
+}

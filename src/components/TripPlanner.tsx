@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/Badge";
 import { ReasoningText } from "@/components/ui/ReasoningText";
@@ -18,7 +18,8 @@ import { Textarea } from "@/components/ui/Textarea";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { countryName, flagEmoji } from "@/lib/country";
 import type { Archetype } from "@/lib/posts";
-import { apiDownload, apiFetch, getSessionSnapshot, parseSessionUser } from "@/client/session";
+import { apiDownload, apiFetch, getSessionSnapshot } from "@/client/session";
+import { CopilotCard, CopilotLauncher, TripCopilot, type CopilotAsk, type CopilotRequest } from "@/components/TripCopilot";
 import { TripExpenses } from "@/components/TripExpenses";
 import { useOnline } from "@/client/hooks/useOnline";
 import { TripMap, type TripMapData } from "@/components/TripMap";
@@ -35,6 +36,7 @@ import {
   type TripPlanChangeKind,
 } from "@/schemas/trip.schema";
 import { useDismiss } from "@/client/hooks/useDismiss";
+import { localDay, parseDay, tripDays } from "@/lib/tripDates";
 
 const ITEM_CATEGORIES = ["transport", "lodging", "activity", "food"] as const;
 export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
@@ -62,6 +64,8 @@ export type Trip = {
   // Envies données à Biirbou à la création.
   instructions: string | null;
   traveler_count: number;
+  // Ce que Biirbou a retenu de la discussion (contraintes durables) : null si rien.
+  memory: string | null;
 };
 
 export type TripItem = {
@@ -73,6 +77,8 @@ export type TripItem = {
   category: ItemCategory;
   // null : couleur de la catégorie (vue Tableau, PDF).
   color: TripItemColor | null;
+  // Proposée par Biirbou (génération, proposition acceptée) ou saisie à la main.
+  origin: "ai" | "manual";
   source_post: { id: number; title: string; slug: string } | null;
 };
 
@@ -97,27 +103,10 @@ export type TripDetail = {
   map: TripMapData;
   // Dernier changement de Biirbou encore annulable (null : rien, délai passé, planning modifié depuis, ou lecteur).
   undo: { kind: TripPlanChangeKind; created_at: string } | null;
+  // Total dépensé (unités mineures de la devise du voyage), pour le copilote.
+  spending: { currency: string; total_minor: number; budget_minor: number | null };
 };
 
-type TripSuggestion = Omit<TripItem, "id" | "color"> & {
-  id: number;
-  status: "pending" | "accepted" | "rejected";
-  action: "add" | "update" | "delete";
-  // Activité modifiée ou supprimée, telle qu'elle est maintenant (null : ajout, ou activité déjà supprimée).
-  target: { id: number; day: string; start_time: string; title: string } | null;
-};
-
-type TripMessage = {
-  id: number;
-  role: "user" | "assistant";
-  content: string;
-  off_topic: boolean;
-  author: { id: string; display_name: string } | null;
-  suggestions: TripSuggestion[];
-};
-
-// Alignée sur trip.schema.
-const CHAT_MESSAGE_MAX = 500;
 
 const PLANNER_ERRORS = [
   "INVALID_INPUT",
@@ -159,20 +148,7 @@ const BUDGET_FIELDS = [
   { key: "budget_activities", body: "budgetActivities", label: "activities" },
 ] as const;
 
-// Midi local : la date ne glisse pas selon le fuseau horaire.
-export function parseDay(day: string) {
-  return new Date(`${day}T12:00:00`);
-}
-
-export function tripDays(start: string, end: string) {
-  const days: string[] = [];
-  for (let date = parseDay(start); date <= parseDay(end); date.setDate(date.getDate() + 1)) {
-    days.push(
-      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
-    );
-  }
-  return days;
-}
+export { localDay, parseDay, tripDays, tripMoment } from "@/lib/tripDates";
 
 export function budgetTotal(trip: Trip) {
   return trip.budget_lodging + trip.budget_transit + trip.budget_dining + trip.budget_activities;
@@ -195,6 +171,8 @@ export function TripPlanner({ tripId }: { tripId: string }) {
   const [sharing, setSharing] = useState(false);
   const [view, setView] = useState<"plan" | "table" | "expenses">("plan");
   const [passFeature, setPassFeature] = useState<TripPassFeature | null>(null);
+  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [copilotRequest, setCopilotRequest] = useState<CopilotRequest | null>(null);
   const online = useOnline();
   const basePath = `/api/v1/trips/${tripId}`;
 
@@ -202,7 +180,21 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     if (!getSessionSnapshot()) return router.replace("/login");
 
     apiFetch<TripDetail>(`/api/v1/trips/${tripId}`).then((result) => {
-      if ("data" in result) return setState({ status: "ready", data: result.data });
+      if ("data" in result) {
+        setState({ status: "ready", data: result.data });
+        // Lien de l'accueil (?copilot=open ou adapt) : Biirbou s'ouvre directement, puis l'URL redevient celle du voyage.
+        const ask = new URLSearchParams(window.location.search).get("copilot");
+        if (ask === "open" || ask === "adapt") {
+          const days = tripDays(result.data.trip.start_date, result.data.trip.end_date);
+          const today = localDay(new Date());
+          setCopilotRequest(
+            ask === "adapt" ? { kind: "adapt", day: days.includes(today) ? today : days[0], nonce: Date.now() } : { kind: "chat", nonce: Date.now() },
+          );
+          setCopilotOpen(true);
+          router.replace(`/planner/${tripId}`, { scroll: false });
+        }
+        return;
+      }
       if (result.error === "UNAUTHORIZED") return router.replace("/login");
       setState({ status: "error", error: plannerError(result.error) });
     });
@@ -213,6 +205,12 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     if (!("data" in result)) return null;
     setState({ status: "ready", data: result.data });
     return result.data;
+  }
+
+  // Biirbou depuis n'importe quel onglet, une activité, le budget ou « Adapter mon voyage ».
+  function openCopilot(request: CopilotAsk = { kind: "chat" }) {
+    setCopilotRequest({ ...request, nonce: Date.now() });
+    setCopilotOpen(true);
   }
 
   // Après le paiement : true si le pass est maintenant actif.
@@ -301,7 +299,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     );
   }
 
-  const { trip, items, tasks, role, pass, chatLimit, mapsUrls, aiQuota, map, undo: lastChange } = state.data;
+  const { trip, items, tasks, role, pass, mapsUrls, map, undo: lastChange } = state.data;
   // Lecteur : consultation seule (l'API refuse de toute façon les modifications).
   const canEdit = role !== "viewer";
 
@@ -377,28 +375,33 @@ export function TripPlanner({ tripId }: { tripId: string }) {
               passActive={pass.active}
               mapsUrls={mapsUrls}
               onLocked={setPassFeature}
+              onAsk={openCopilot}
             />
             {/* Tuiles en ligne uniquement : rien hors connexion. */}
             {online && <TripMap map={map} />}
           </div>
           <aside className="flex flex-col gap-6">
-            <TripChat
-              basePath={basePath}
-              refreshKey={chatVersion}
-              trip={trip}
-              mutate={mutate}
-              canEdit={canEdit}
-              chatLimit={chatLimit}
-              aiQuota={aiQuota}
-              passActive={pass.active}
-              onUpsell={setPassFeature}
-            />
+            <CopilotCard detail={state.data} onOpen={openCopilot} />
             {!pass.active && <TripPassCard pass={pass} onOpen={() => setPassFeature("info")} />}
             <TaskChecklist tasks={tasks} mutate={mutate} canEdit={canEdit} />
-            <BudgetCard trip={trip} mutate={mutate} canEdit={canEdit} />
+            <BudgetCard trip={trip} mutate={mutate} canEdit={canEdit} onAsk={() => openCopilot({ kind: "chat", draft: t("copilot.prefill.budget") })} />
           </aside>
         </div>
       )}
+
+      {/* Monté en permanence (discussion et brouillon gardés à la fermeture) ; hors ligne : Biirbou est injoignable. */}
+      <TripCopilot
+        open={copilotOpen && online}
+        onClose={() => setCopilotOpen(false)}
+        request={copilotRequest}
+        basePath={basePath}
+        refreshKey={chatVersion}
+        detail={state.data}
+        mutate={mutate}
+        onReload={reloadTrip}
+        onUpsell={setPassFeature}
+      />
+      {online && !copilotOpen && <CopilotLauncher onOpen={() => openCopilot()} />}
 
       {!pass.active && (
         <TripPassDialog feature={passFeature} onClose={() => setPassFeature(null)} tripId={tripId} pass={pass} role={role} onRefresh={reloadPass} />
@@ -680,6 +683,7 @@ function DayPlanner({
   passActive,
   mapsUrls,
   onLocked,
+  onAsk,
 }: {
   trip: Trip;
   items: TripItem[];
@@ -688,12 +692,15 @@ function DayPlanner({
   passActive: boolean;
   mapsUrls: Record<string, string> | null;
   onLocked: (feature: TripPassFeature) => void;
+  onAsk: (request: CopilotAsk) => void;
 }) {
   const t = useTranslations("Planner");
   const confirm = useConfirm();
   const format = useFormatter();
   const days = tripDays(trip.start_date, trip.end_date);
-  const [selectedDay, setSelectedDay] = useState(days[0]);
+  // Pendant le voyage, la journée en cours s'affiche d'abord.
+  const [today] = useState(() => localDay(new Date()));
+  const [selectedDay, setSelectedDay] = useState(days.includes(today) ? today : days[0]);
   const [adding, setAdding] = useState(false);
   const [regeneratingDay, setRegeneratingDay] = useState(false);
   // Le voyage a pu être régénéré entre-temps.
@@ -737,7 +744,7 @@ function DayPlanner({
                 active ? "bg-ink text-surface" : "bg-surface-muted text-ink-soft hover:text-ink"
               }`}
             >
-              <span>{t("days.label", { number: index + 1 })}</span>
+              <span>{value === today ? t("days.today") : t("days.label", { number: index + 1 })}</span>
               <span className="text-label-sm opacity-80">
                 {format.dateTime(parseDay(value), { day: "numeric", month: "short" })}
               </span>
@@ -760,6 +767,17 @@ function DayPlanner({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {canEdit && (
+            <Button
+              size="sm"
+              variant={day === today ? "primary" : "secondary"}
+              onClick={() => onAsk({ kind: "adapt", day })}
+              className="gap-1.5"
+            >
+              <Icon name="sparkles" className="size-4" />
+              {t(day === today ? "copilot.adaptToday" : "copilot.adaptDay")}
+            </Button>
+          )}
           {canEdit && (
             <Button
               variant="secondary"
@@ -803,7 +821,19 @@ function DayPlanner({
 
         <ol className="flex flex-col gap-3">
           {dayItems.map((item) => (
-            <ItemRow key={item.id} item={item} days={days} mutate={mutate} canEdit={canEdit} />
+            <ItemRow
+              key={item.id}
+              item={item}
+              days={days}
+              mutate={mutate}
+              canEdit={canEdit}
+              onAsk={() =>
+                onAsk({
+                  kind: "chat",
+                  draft: t("copilot.prefill.item", { title: item.title, number: days.indexOf(item.day) + 1, time: item.start_time }),
+                })
+              }
+            />
           ))}
         </ol>
 
@@ -827,7 +857,19 @@ function DayPlanner({
   );
 }
 
-function ItemRow({ item, days, mutate, canEdit }: { item: TripItem; days: string[]; mutate: Mutate; canEdit: boolean }) {
+function ItemRow({
+  item,
+  days,
+  mutate,
+  canEdit,
+  onAsk,
+}: {
+  item: TripItem;
+  days: string[];
+  mutate: Mutate;
+  canEdit: boolean;
+  onAsk: () => void;
+}) {
   const t = useTranslations("Planner");
   const [editing, setEditing] = useState(false);
 
@@ -855,18 +897,12 @@ function ItemRow({ item, days, mutate, canEdit }: { item: TripItem; days: string
           {item.title}
         </span>
         {item.description && <p className="text-body-sm text-ink-soft">{item.description}</p>}
-        {item.source_post && (
-          <p className="text-body-sm text-ink-soft">
-            {t("item.source")}{" "}
-            <Link href={`/post/${item.source_post.slug}`} className="font-medium text-accent hover:underline">
-              {item.source_post.title}
-            </Link>
-          </p>
-        )}
+        <ItemOrigin item={item} />
       </div>
       {/* Empilés sur mobile : plus de place pour le titre. */}
       {canEdit && (
         <div className="-mt-1.5 -mr-1.5 flex shrink-0 flex-col items-start sm:mt-0 sm:mr-0 sm:flex-row sm:gap-1">
+          <IconButton icon="sparkles" label={t("copilot.askItem", { title: item.title })} onClick={onAsk} />
           <IconButton icon="edit" label={t("item.edit", { title: item.title })} onClick={() => setEditing(true)} />
           <IconButton
             icon="delete"
@@ -876,6 +912,26 @@ function ItemRow({ item, days, mutate, canEdit }: { item: TripItem; days: string
         </div>
       )}
     </li>
+  );
+}
+
+// Provenance (#39) : récit de la communauté, proposition de Biirbou (estimation à vérifier) ou saisie à la main.
+function ItemOrigin({ item }: { item: TripItem }) {
+  const t = useTranslations("Planner");
+  if (item.source_post) {
+    return (
+      <p className="flex flex-wrap items-center gap-1.5 text-body-sm text-ink-soft">
+        <Badge tone="accent">{t("origin.post")}</Badge>
+        <Link href={`/post/${item.source_post.slug}`} className="font-medium text-accent hover:underline">
+          {item.source_post.title}
+        </Link>
+      </p>
+    );
+  }
+  return (
+    <p className="text-body-sm">
+      <Badge title={item.origin === "ai" ? t("origin.aiHint") : undefined}>{t(item.origin === "ai" ? "origin.ai" : "origin.manual")}</Badge>
+    </p>
   );
 }
 
@@ -1032,7 +1088,7 @@ function TaskChecklist({ tasks, mutate, canEdit }: { tasks: TripTask[]; mutate: 
   );
 }
 
-function BudgetCard({ trip, mutate, canEdit }: { trip: Trip; mutate: Mutate; canEdit: boolean }) {
+function BudgetCard({ trip, mutate, canEdit, onAsk }: { trip: Trip; mutate: Mutate; canEdit: boolean; onAsk: () => void }) {
   const t = useTranslations("Planner");
   const [saved, setSaved] = useState(false);
   const total = budgetTotal(trip);
@@ -1098,6 +1154,10 @@ function BudgetCard({ trip, mutate, canEdit }: { trip: Trip; mutate: Mutate; can
         </fieldset>
         {canEdit && (
           <div className="flex items-center justify-end gap-3">
+            <button type="button" onClick={onAsk} className="mr-auto flex items-center gap-1 text-label-md font-medium text-accent hover:underline">
+              <Icon name="sparkles" className="size-4" />
+              {t("copilot.askBudget")}
+            </button>
             {saved && (
               <span role="status" className="text-body-sm text-ink-soft">
                 {t("budget.saved")}
@@ -1110,324 +1170,6 @@ function BudgetCard({ trip, mutate, canEdit }: { trip: Trip; mutate: Mutate; can
         )}
       </form>
     </Card>
-  );
-}
-
-// Une proposition n'est ajoutée au planning que si l'utilisateur répond oui.
-function TripChat({
-  basePath,
-  refreshKey,
-  trip,
-  mutate,
-  canEdit,
-  chatLimit,
-  aiQuota,
-  passActive,
-  onUpsell,
-}: {
-  basePath: string;
-  refreshKey: number;
-  trip: Trip;
-  mutate: Mutate;
-  canEdit: boolean;
-  chatLimit: number;
-  aiQuota: TripDetail["aiQuota"];
-  passActive: boolean;
-  onUpsell: (feature: TripPassFeature) => void;
-}) {
-  const t = useTranslations("Planner");
-  const me = parseSessionUser(getSessionSnapshot());
-  const router = useRouter();
-  const [messages, setMessages] = useState<TripMessage[] | null>(null);
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<PlannerError | null>(null);
-  const scroller = useRef<HTMLDivElement>(null);
-  const days = tripDays(trip.start_date, trip.end_date);
-  const remaining = chatLimit - (messages ?? []).filter((message) => message.role === "user").length;
-  // Requêtes envoyées depuis le dernier chargement du voyage : remises à zéro quand le serveur renvoie un nouveau compteur.
-  const [counter, setCounter] = useState({ base: aiQuota.used, sent: 0 });
-  const used = aiQuota.used + (counter.base === aiQuota.used ? counter.sent : 0);
-  const quotaReached = aiQuota.limit !== null && used >= aiQuota.limit;
-
-  const loadMessages = useCallback(
-    () =>
-      apiFetch<{ messages: TripMessage[] }>(`${basePath}/messages`).then((result) => {
-        if ("data" in result) return setMessages(result.data.messages);
-        if (result.error === "UNAUTHORIZED") return router.replace("/login");
-        setError(plannerError(result.error));
-      }),
-    [basePath, router],
-  );
-
-  useEffect(() => {
-    void loadMessages();
-  }, [loadMessages, refreshKey]);
-
-  useEffect(() => {
-    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
-  }, [messages, sending]);
-
-  async function send() {
-    const content = draft.trim();
-    if (content.length < 2 || sending) return;
-    if (quotaReached) return passActive ? undefined : onUpsell("ai");
-
-    setSending(true);
-    setError(null);
-    const result = await apiFetch<{ messages: TripMessage[] }>(`${basePath}/messages`, {
-      method: "POST",
-      body: { content },
-    });
-    setSending(false);
-
-    if ("data" in result) {
-      setMessages(result.data.messages);
-      setDraft("");
-      setCounter({ base: aiQuota.used, sent: used - aiQuota.used + 1 });
-      return;
-    }
-    if (result.error === "UNAUTHORIZED") return router.replace("/login");
-    if (result.error === "DAILY_LIMIT_REACHED" && aiQuota.limit !== null) setCounter({ base: aiQuota.used, sent: aiQuota.limit - aiQuota.used });
-    // Sans pass : le pass est proposé à la place du message d'erreur.
-    if (!passActive && (result.error === "DAILY_LIMIT_REACHED" || result.error === "CHAT_LIMIT_REACHED")) {
-      return onUpsell(result.error === "DAILY_LIMIT_REACHED" ? "ai" : "chat");
-    }
-    setError(plannerError(result.error));
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void send();
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      void send();
-    }
-  }
-
-  async function answer(suggestion: TripSuggestion, accepted: boolean) {
-    const ok = await mutate(`/suggestions/${suggestion.id}`, "PATCH", { accepted });
-    if (!ok) return loadMessages();
-    const status = accepted ? "accepted" : "rejected";
-    setMessages((current) =>
-      (current ?? []).map((message) => ({
-        ...message,
-        suggestions: message.suggestions.map((item) => (item.id === suggestion.id ? { ...item, status } : item)),
-      })),
-    );
-  }
-
-  return (
-    <Card className="flex flex-col gap-4 p-6">
-      <div className="flex flex-col gap-1">
-        <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
-          <Icon name="sparkles" className="size-5 text-accent" />
-          {t("chat.title")}
-        </h2>
-        <p className="text-body-sm text-ink-soft">{t("chat.hint")}</p>
-        {/* Combien de fois Biirbou peut encore aider aujourd'hui (rien pour un compte sans limite). */}
-        {canEdit && aiQuota.limit !== null && !quotaReached && (
-          <p aria-live="polite" className="mt-1 inline-flex items-center gap-1.5 self-start rounded-lg bg-surface-muted px-2.5 py-1 text-label-sm text-ink-soft">
-            <Icon name="sparkles" className="size-3.5 text-accent" />
-            {t.rich("chat.left", {
-              count: Math.max(0, aiQuota.limit - used),
-              strong: (chunks) => <strong className="font-semibold text-ink">{chunks}</strong>,
-            })}
-          </p>
-        )}
-      </div>
-
-      <div ref={scroller} className="flex max-h-[32rem] flex-col gap-3 overflow-y-auto" aria-live="polite">
-        {messages === null && !error && <div className="h-16 animate-pulse rounded-lg bg-surface-muted" aria-hidden="true" />}
-        {messages?.length === 0 && <p className="text-body-sm text-ink-soft">{t("chat.empty")}</p>}
-
-        {messages?.map((message) =>
-          message.role === "user" ? (
-            <div key={message.id} className="flex max-w-[85%] flex-col items-end gap-0.5 self-end">
-              {/* Discussion partagée : on nomme les autres membres. */}
-              {message.author && message.author.id !== me?.id && (
-                <span className="text-label-sm text-ink-soft">{message.author.display_name}</span>
-              )}
-              <p className="rounded-lg bg-ink px-3 py-2 text-body-sm whitespace-pre-line text-surface">{message.content}</p>
-            </div>
-          ) : (
-            <div key={message.id} className="flex max-w-[95%] flex-col gap-2 self-start">
-              <p
-                className={`rounded-lg bg-surface-muted px-3 py-2 text-body-sm whitespace-pre-line ${
-                  message.off_topic ? "text-ink-soft italic" : "text-ink"
-                }`}
-              >
-                {message.off_topic ? t("chat.offTopic") : message.content}
-              </p>
-              {message.suggestions.length > 0 && (
-                <ul className="flex flex-col gap-2" aria-label={t("chat.suggestions")}>
-                  {message.suggestions.map((suggestion) => (
-                    <SuggestionCard
-                      key={suggestion.id}
-                      suggestion={suggestion}
-                      dayNumber={days.indexOf(suggestion.day) + 1}
-                      onAnswer={canEdit ? (accepted) => answer(suggestion, accepted) : undefined}
-                    />
-                  ))}
-                </ul>
-              )}
-            </div>
-          ),
-        )}
-
-        {sending && (
-          <>
-            <p className="max-w-[85%] self-end rounded-lg bg-ink px-3 py-2 text-body-sm whitespace-pre-line text-surface">
-              {draft.trim()}
-            </p>
-            <div className="self-start rounded-lg bg-surface-muted px-3 py-2">
-              <ReasoningText phrases={t.raw("chat.reasoning") as string[]} />
-            </div>
-          </>
-        )}
-      </div>
-
-      {error && <FormError>{t(`errors.${error}`)}</FormError>}
-
-      {!canEdit ? (
-        <p className="text-body-sm text-ink-soft">{t("share.viewerChat")}</p>
-      ) : remaining > 0 ? (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-          <label htmlFor="chat-message" className="sr-only">
-            {t("chat.label")}
-          </label>
-          <div className="flex items-end gap-2">
-            <Textarea
-              id="chat-message"
-              value={draft}
-              onChange={(event) => setDraft(event.currentTarget.value)}
-              onKeyDown={handleKeyDown}
-              minLength={2}
-              maxLength={CHAT_MESSAGE_MAX}
-              rows={1}
-              placeholder={t("chat.placeholder")}
-              required
-              className="max-h-40"
-            />
-            {quotaReached && !passActive ? (
-              <Button onClick={() => onUpsell("ai")} className="shrink-0 gap-1.5">
-                <Icon name="sparkles" className="size-4.5" />
-                {t("chat.upgrade")}
-              </Button>
-            ) : (
-              <Button type="submit" disabled={sending || messages === null || quotaReached} aria-label={t("chat.send")} className="shrink-0 px-3">
-                <Icon name="send" className="size-5" />
-              </Button>
-            )}
-          </div>
-          {quotaReached ? (
-            <p className="text-label-sm text-ink-soft">
-              {t(passActive ? "chat.quotaReachedPass" : "chat.quotaReached")}
-            </p>
-          ) : (
-            remaining <= 10 && <p className="text-label-sm text-ink-soft">{t("chat.remaining", { count: remaining })}</p>
-          )}
-        </form>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-body-sm text-ink-soft">{t("errors.CHAT_LIMIT_REACHED")}</p>
-          {!passActive && (
-            <Button size="sm" onClick={() => onUpsell("chat")} className="gap-1.5">
-              <Icon name="sparkles" className="size-4" />
-              {t("chat.upgrade")}
-            </Button>
-          )}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function SuggestionCard({
-  suggestion,
-  dayNumber,
-  onAnswer,
-}: {
-  suggestion: TripSuggestion;
-  dayNumber: number;
-  // Absent : lecteur, la proposition est affichée sans boutons.
-  onAnswer?: (accepted: boolean) => Promise<unknown>;
-}) {
-  const t = useTranslations("Planner");
-  const format = useFormatter();
-  const [pending, setPending] = useState(false);
-
-  async function handleAnswer(accepted: boolean) {
-    if (!onAnswer) return;
-    setPending(true);
-    await onAnswer(accepted);
-    setPending(false);
-  }
-
-  return (
-    <li
-      className={`flex flex-col gap-1.5 rounded-lg border border-line p-3 ${
-        suggestion.status === "rejected" ? "opacity-60" : "bg-surface"
-      }`}
-    >
-      <span className="flex flex-wrap items-center gap-1.5 text-label-sm text-ink-soft">
-        <Badge tone={suggestion.action === "delete" ? "danger" : suggestion.action === "update" ? "accent" : "neutral"}>
-          {t(`chat.actions.${suggestion.action}`)}
-        </Badge>
-        <Icon name={CATEGORY_ICONS[suggestion.category]} className="size-4" />
-        {t("chat.suggestionWhen", {
-          number: dayNumber,
-          date: format.dateTime(parseDay(suggestion.day), { day: "numeric", month: "short" }),
-          time: suggestion.start_time,
-        })}
-      </span>
-      <span className={`font-display text-label-lg text-ink ${suggestion.action === "delete" ? "line-through" : ""}`}>
-        {suggestion.title}
-      </span>
-      {suggestion.action === "update" && suggestion.target && (
-        <span className="text-label-sm text-ink-soft">
-          {t("chat.before", {
-            date: format.dateTime(parseDay(suggestion.target.day), { day: "numeric", month: "short" }),
-            time: suggestion.target.start_time,
-            title: suggestion.target.title,
-          })}
-        </span>
-      )}
-      {suggestion.description && <p className="text-body-sm text-ink-soft">{suggestion.description}</p>}
-      {suggestion.source_post && (
-        <p className="text-body-sm text-ink-soft">
-          {t("item.source")}{" "}
-          <Link href={`/post/${suggestion.source_post.slug}`} className="font-medium text-accent hover:underline">
-            {suggestion.source_post.title}
-          </Link>
-        </p>
-      )}
-
-      {suggestion.status === "pending" && !onAnswer ? null : suggestion.status === "pending" ? (
-        <div className="mt-1 flex items-center gap-2">
-          <span className="mr-auto text-label-sm text-ink-soft">{t(`chat.questions.${suggestion.action}`)}</span>
-          <Button size="sm" variant="secondary" disabled={pending} onClick={() => void handleAnswer(false)}>
-            {t("chat.no")}
-          </Button>
-          <Button size="sm" disabled={pending} onClick={() => void handleAnswer(true)}>
-            <Icon name="check" className="size-4" />
-            {t("chat.yes")}
-          </Button>
-        </div>
-      ) : (
-        <span
-          className={`mt-1 flex items-center gap-1.5 text-label-sm ${
-            suggestion.status === "accepted" ? "text-accent" : "text-ink-soft"
-          }`}
-        >
-          {suggestion.status === "accepted" && <Icon name="check" className="size-4" />}
-          {suggestion.status === "accepted" ? t(`chat.applied.${suggestion.action}`) : t("chat.rejected")}
-        </span>
-      )}
-    </li>
   );
 }
 

@@ -39,6 +39,7 @@ export function HomeHero({ photos }: { photos: { slug: string; photo_url: string
       <div className="flex flex-col items-center gap-2 px-6 text-center text-surface">
         <p className="font-display text-display-lg-mobile md:text-display-lg">{t("heroBrand")}</p>
         <p className="font-display text-headline-sm text-balance md:text-headline-md">{t("heroTagline")}</p>
+        <p className="max-w-xl text-body-md text-balance text-surface/90">{t("heroCopilot")}</p>
       </div>
     </section>
   );
