@@ -1151,7 +1151,8 @@
         "all": "Tous",
         "mine": "Les miens",
         "unassigned": "Non assignés"
-      }
+      },
+      "me": "{name} (moi)"
     }
   },
   "TripExport": {

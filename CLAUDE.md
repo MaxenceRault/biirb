@@ -99,7 +99,7 @@ src/
 ├── i18n/
 │   └── request.ts             # Config next-intl (locale + chargement des messages)
 ├── components/
-│   ├── ui/                    # Design system : ReasoningText (l'IA travaille : phrases en cascade, avec motion), EmptyState, Button, IconButton, Input, Textarea, Autocomplete, PasswordInput, Label, Field, Checkbox, Card, Icon, Avatar, Logo, Badge, Dialog (fenêtre modale <dialog> natif), ConfirmDialog (fenêtre de confirmation commune : ConfirmProvider dans le layout + hook useConfirm ; titre, explication, verbe d'action, icône, ton danger)
+│   ├── ui/                    # Design system : ReasoningText (l'IA travaille : phrases en cascade, avec motion), EmptyState, Button, IconButton, Input, Textarea, Autocomplete, PasswordInput, Label, Field, Checkbox, Card, Icon, Avatar, Logo, Badge, FilterChip (puce de filtre + FilterBar, filterChipClassName pour un Link : accueil, Kanban), Dialog (fenêtre modale <dialog> natif), ConfirmDialog (fenêtre de confirmation commune : ConfirmProvider dans le layout + hook useConfirm ; titre, explication, verbe d'action, icône, ton danger)
 │   ├── Navbar.tsx             # Barre du haut (version visiteur / connecté)
 │   ├── NavbarAccount.tsx      # Zone compte de la Navbar (client : lit la session du navigateur)
 │   ├── Footer.tsx
@@ -120,7 +120,7 @@ src/
 │   ├── TripPassCard.tsx       # Offre du pass : carte (colonne de droite) et fenêtre (TripPassDialog) ouverte par une fonction verrouillée ou une limite IA atteinte
 │   ├── PlannerHome.tsx        # Liste des voyages + formulaire de génération (client)
 │   ├── AdminView.tsx          # Page d'administration (client, onglets) → /api/v1/admin/*
-│   ├── AdminKanban.tsx        # Onglet Kanban de l'admin (client) : switch Support / Développement, colonnes À faire, En cours, Fait, Clôturé (glisser-déposer, ou flèches ← → sur une carte sélectionnée), priorité en un clic sur chaque carte, assignés (avatars empilés + liste des admins à cocher, 5 au plus), filtre Tous / Les miens / Non assignés
+│   ├── AdminKanban.tsx        # Onglet Kanban de l'admin (client) : switch Support / Développement, colonnes À faire, En cours, Fait, Clôturé (glisser-déposer, ou flèches ← → sur une carte sélectionnée), priorité en un clic sur chaque carte, assignés (avatars empilés + liste des admins à cocher, 5 au plus), filtre en puces (`ui/FilterChip`, même style que l'accueil) : Tous / Les miens / Non assignés, puis une puce par admin (plusieurs à la fois : carte affichée si l'un d'eux y est assigné ; filtrage dans le navigateur)
 │   ├── ReportButton.tsx       # « Signaler » un récit (page détail)
 │   ├── SupportView.tsx        # Page Support (client) : formulaire de ticket + mes tickets
 │   ├── TicketStatusBadge.tsx  # Badge de l'état d'un ticket (Support, administration)

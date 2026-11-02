@@ -8,10 +8,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { FilterBar, FilterChip } from "@/components/ui/FilterChip";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { BOARD_COLUMNS, DEV_TICKET_DESCRIPTION_MAX, DEV_TICKET_TITLE_MAX, DEV_TICKET_TITLE_MIN, type BoardColumn } from "@/schemas/dev-ticket.schema";
 import {
   TICKET_MAX_ASSIGNEES,
@@ -64,15 +65,28 @@ const SUPPORT_STATUS: Record<BoardColumn, TicketStatus> = { todo: "open", in_pro
 const BOARDS = ["support", "dev"] as const;
 type Board = (typeof BOARDS)[number];
 
-// Filtre des cartes, commun aux deux tableaux. « mine » : l'admin connecté est assigné.
+// Filtre des cartes, commun aux deux tableaux. « mine » : l'admin connecté est assigné ; « people » : un des admins choisis.
 const FILTERS = ["all", "mine", "unassigned"] as const;
-type Filter = (typeof FILTERS)[number];
+type Filter = (typeof FILTERS)[number] | "people";
 
 // currentUserId : profil de la session (affichage seulement, les droits sont vérifiés par l'API).
 export function AdminKanban({ call, currentUserId }: { call: Call; currentUserId: string | null }) {
   const t = useTranslations("Admin.kanban");
   const [board, setBoard] = useState<Board>("support");
   const [filter, setFilter] = useState<Filter>("all");
+  const [people, setPeople] = useState<string[]>([]);
+
+  function chooseFilter(value: Filter) {
+    setFilter(value);
+    setPeople([]);
+  }
+
+  // Plusieurs personnes à la fois ; plus personne de choisi : retour à « Tous ».
+  function togglePerson(id: string) {
+    const next = people.includes(id) ? people.filter((value) => value !== id) : [...people, id];
+    setPeople(next);
+    setFilter(next.length > 0 ? "people" : "all");
+  }
   // Chargés une fois pour les deux tableaux ; null : sélecteur masqué (erreur déjà affichée).
   const [admins, setAdmins] = useState<Assignee[] | null>(null);
   useEffect(() => {
@@ -83,41 +97,47 @@ export function AdminKanban({ call, currentUserId }: { call: Call; currentUserId
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Segmented label={t("switchLabel")} options={BOARDS} value={board} onChange={setBoard}>
-          {(value) => (
-            <>
-              <Icon name={value === "support" ? "help" : "settings"} className="size-4.5" />
-              {t(`boards.${value}`)}
-            </>
-          )}
-        </Segmented>
-        <Segmented
-          label={t("filterLabel")}
-          options={currentUserId ? FILTERS : FILTERS.filter((value) => value !== "mine")}
-          value={filter}
-          onChange={setFilter}
-        >
-          {(value) => t(`filters.${value}`)}
-        </Segmented>
-      </div>
+      <Segmented label={t("switchLabel")} options={BOARDS} value={board} onChange={setBoard}>
+        {(value) => (
+          <>
+            <Icon name={value === "support" ? "help" : "settings"} className="size-4.5" />
+            {t(`boards.${value}`)}
+          </>
+        )}
+      </Segmented>
+      <FilterBar label={t("filterLabel")} className="border-b border-line pb-3">
+        {/* « Les miens » : profil de session requis. */}
+        {FILTERS.filter((value) => value !== "mine" || currentUserId).map((value) => (
+          <FilterChip key={value} active={filter === value} onClick={() => chooseFilter(value)}>
+            {t(`filters.${value}`)}
+          </FilterChip>
+        ))}
+        {admins && admins.length > 0 && <span aria-hidden="true" className="mx-1 h-6 w-px shrink-0 bg-line" />}
+        {admins?.map((admin) => (
+          <FilterChip key={admin.id} active={people.includes(admin.id)} onClick={() => togglePerson(admin.id)} className="pl-1.5">
+            <Avatar src={admin.avatar_url} name={admin.avatar_seed ?? admin.id} backgroundColor={admin.avatar_background_color} alt="" size={20} />
+            {admin.id === currentUserId ? t("me", { name: admin.display_name }) : admin.display_name}
+          </FilterChip>
+        ))}
+      </FilterBar>
       <p className="text-body-sm text-ink-soft">{t(`hints.${board}`)}</p>
       {board === "support" ? (
-        <SupportBoard call={call} admins={admins} visible={(ticket) => matchesFilter(ticket, filter, currentUserId)} />
+        <SupportBoard call={call} admins={admins} visible={(ticket) => matchesFilter(ticket, filter, currentUserId, people)} />
       ) : (
-        <DevBoard call={call} admins={admins} visible={(ticket) => matchesFilter(ticket, filter, currentUserId)} />
+        <DevBoard call={call} admins={admins} visible={(ticket) => matchesFilter(ticket, filter, currentUserId, people)} />
       )}
     </div>
   );
 }
 
-function matchesFilter(ticket: { assignees: Assignee[] }, filter: Filter, currentUserId: string | null) {
+function matchesFilter(ticket: { assignees: Assignee[] }, filter: Filter, currentUserId: string | null, people: string[]) {
   if (filter === "mine") return ticket.assignees.some((assignee) => assignee.id === currentUserId);
   if (filter === "unassigned") return ticket.assignees.length === 0;
+  if (filter === "people") return ticket.assignees.some((assignee) => people.includes(assignee.id));
   return true;
 }
 
-// Boutons à bascule, un seul actif : choix du tableau et filtre des cartes.
+// Boutons à bascule, un seul actif : choix du tableau (Support / Développement).
 function Segmented<T extends string>({
   label,
   options,
@@ -132,7 +152,7 @@ function Segmented<T extends string>({
   children: (value: T) => ReactNode;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex gap-1 rounded-lg bg-surface-muted p-1">
+    <div role="group" aria-label={label} className="flex gap-1 self-start rounded-lg bg-surface-muted p-1">
       {options.map((option) => (
         <button
           key={option}

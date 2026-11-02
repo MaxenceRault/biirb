@@ -12,6 +12,7 @@ import { HomeArchetypeNav, PlannerInvite, TrendingDestinations } from "@/compone
 import { BackToTop } from "@/components/BackToTop";
 import { NewPostButton } from "@/components/NewPostButton";
 import { Card } from "@/components/ui/Card";
+import { filterChipClassName } from "@/components/ui/FilterChip";
 import { FEED_ANCHOR_ID, type Archetype, type FeedPage } from "@/lib/posts";
 import { listActiveArchetypes } from "@/server/services/archetype.service";
 import { getFeedPage, getHeroPhotos, getTrendingDestinations, searchPosts } from "@/server/services/post.service";
@@ -218,11 +219,7 @@ async function ArchetypeTabs({ archetypes, active }: { archetypes: Archetype[]; 
             <FeedFilterLink
               href={tab.href}
               aria-current={tab.isActive ? "page" : undefined}
-              className={`block rounded-lg border px-3.5 py-1.5 font-display text-label-md whitespace-nowrap transition ${
-                tab.isActive
-                  ? "border-ink bg-ink text-surface"
-                  : "border-line bg-surface text-ink-soft hover:border-ink-soft/25 hover:text-ink"
-              }`}
+              className={filterChipClassName(tab.isActive)}
             >
               {tab.label}
             </FeedFilterLink>
