@@ -314,3 +314,22 @@ export function getAnalyticsConfig(): AnalyticsConfig | null {
     domain: parsed.data.APP_URL ? new URL(parsed.data.APP_URL).hostname : null,
   });
 }
+
+// Base des liens absolus des métadonnées (og:url) : sans APP_URL, Next se rabat sur localhost.
+const siteUrlSchema = z.url({ protocol: /^https?$/ });
+
+let siteUrl: URL | null | undefined;
+
+export function getSiteUrl(): URL | null {
+  if (siteUrl !== undefined) return siteUrl;
+
+  const { APP_URL } = process.env;
+  if (!APP_URL) return (siteUrl = null);
+
+  const parsed = siteUrlSchema.safeParse(APP_URL);
+  if (!parsed.success) {
+    logError("config", "invalid env (site url disabled): APP_URL");
+    return (siteUrl = null);
+  }
+  return (siteUrl = new URL(parsed.data));
+}
