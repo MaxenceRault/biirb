@@ -27,9 +27,14 @@ import {
   requireAdmin,
   listTickets,
   setPostHidden,
-  setTicketStatus,
+  updateTicket,
   updateSettings,
   updateUser,
+  createDevTicket,
+  getSupportBoard,
+  listDevTickets,
+  removeDevTicket,
+  updateDevTicket,
 } from "@/server/services/admin.service";
 import {
   adminCloseReportsSchema,
@@ -45,6 +50,7 @@ import {
 import { createArchetypeSchema, updateArchetypeSchema } from "@/schemas/archetype.schema";
 import { postIdSchema } from "@/schemas/post.schema";
 import { adminTicketsQuerySchema, adminUpdateTicketSchema, ticketIdSchema } from "@/schemas/ticket.schema";
+import { createDevTicketSchema, devTicketIdSchema, updateDevTicketSchema } from "@/schemas/dev-ticket.schema";
 import { logError } from "@/server/logger";
 
 type Params = Promise<Record<string, string | string[] | undefined>>;
@@ -135,13 +141,53 @@ export function listTicketsController(request: Request) {
   });
 }
 
-// PATCH /api/v1/admin/tickets/[id] { status }
+// PATCH /api/v1/admin/tickets/[id] { status?, priority? }
 export function updateTicketController(request: Request, { params }: Context) {
   return withAdmin(request, async (adminId) => {
     const id = ticketIdSchema.safeParse((await params).id);
     const body = await parseBody(request, adminUpdateTicketSchema);
     if (!id.success || !body) return errorResponse(400, "INVALID_INPUT");
-    await setTicketStatus(adminId, id.data, body.status);
+    await updateTicket(adminId, id.data, body);
+    return new Response(null, { status: 204 });
+  });
+}
+
+// GET /api/v1/admin/tickets/board : Kanban du support.
+export function supportBoardController(request: Request) {
+  return withAdmin(request, async () => json(await getSupportBoard()));
+}
+
+// GET /api/v1/admin/dev-tickets : Kanban du développement.
+export function listDevTicketsController(request: Request) {
+  return withAdmin(request, async () => json(await listDevTickets()));
+}
+
+// POST /api/v1/admin/dev-tickets { title, description?, priority? }
+export function createDevTicketController(request: Request) {
+  return withAdmin(request, async (adminId) => {
+    const body = await parseBody(request, createDevTicketSchema);
+    if (!body) return errorResponse(400, "INVALID_INPUT");
+    return json(await createDevTicket(adminId, body), 201);
+  });
+}
+
+// PATCH /api/v1/admin/dev-tickets/[id] { title?, description?, status?, priority? }
+export function updateDevTicketController(request: Request, { params }: Context) {
+  return withAdmin(request, async (adminId) => {
+    const id = devTicketIdSchema.safeParse((await params).id);
+    const body = await parseBody(request, updateDevTicketSchema);
+    if (!id.success || !body) return errorResponse(400, "INVALID_INPUT");
+    await updateDevTicket(adminId, id.data, body);
+    return new Response(null, { status: 204 });
+  });
+}
+
+// DELETE /api/v1/admin/dev-tickets/[id]
+export function deleteDevTicketController(request: Request, { params }: Context) {
+  return withAdmin(request, async (adminId) => {
+    const id = devTicketIdSchema.safeParse((await params).id);
+    if (!id.success) return errorResponse(400, "INVALID_INPUT");
+    await removeDevTicket(adminId, id.data);
     return new Response(null, { status: 204 });
   });
 }

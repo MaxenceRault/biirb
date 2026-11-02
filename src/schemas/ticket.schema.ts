@@ -6,8 +6,13 @@ export const TICKET_SUBJECT_MAX = 120;
 export const TICKET_MESSAGE_MIN = 10;
 export const TICKET_MESSAGE_MAX = 2000;
 
-export const TICKET_STATUSES = ["open", "in_progress", "resolved"] as const;
+// closed : clôturé par un admin (Kanban), plus rien à faire.
+export const TICKET_STATUSES = ["open", "in_progress", "resolved", "closed"] as const;
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
+
+// Priorité (Kanban de l'admin) : tickets de support et de développement. Jamais montrée à l'auteur d'un ticket de support.
+export const TICKET_PRIORITIES = ["low", "medium", "high"] as const;
+export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 
 // trip_pass : paiement ou activation du pass voyage, les admins sont prévenus par email.
 export const TICKET_CATEGORIES = ["trip_pass", "bug", "report", "account", "other"] as const;
@@ -28,4 +33,7 @@ export const adminTicketsQuerySchema = z.strictObject({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
 });
 
-export const adminUpdateTicketSchema = z.strictObject({ status: z.enum(TICKET_STATUSES) });
+export const adminUpdateTicketSchema = z
+  .strictObject({ status: z.enum(TICKET_STATUSES), priority: z.enum(TICKET_PRIORITIES) })
+  .partial()
+  .refine((changes) => Object.keys(changes).length > 0);
