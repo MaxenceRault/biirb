@@ -15,8 +15,9 @@ import { requireTripPass } from "@/server/services/trip-pass.service";
 import { TripError, tripDayAreas, type DayArea } from "@/server/services/trip.service";
 import type { TravelProfile } from "@/schemas/trip.schema";
 
-// Au-delà, la marche ne suffit plus : le trajet en voiture (ou taxi) est donné aussi.
-const WALK_MAX_METERS = 2_000;
+// À vol d'oiseau (la marche est plus longue, ≈ 2 km) : au-delà, le trajet en voiture (ou taxi) est donné aussi.
+// Décidé sans attendre la marche : les deux calculs partent ensemble.
+const DRIVE_FROM_METERS = 1_500;
 // Recherches de lieux par requête : quota OpenRouteService (≈ 1 000 par jour, 100 par minute). Le reste au prochain affichage.
 const MAX_SEARCHES = 8;
 // Même limite que trip_item.place_query (db/migrations).
@@ -30,9 +31,21 @@ export type DayTravel = { legs: TravelLeg[]; unlocated: number[]; pending: numbe
 // Temps de trajet entre les activités d'un jour (pass voyage) : chaque lieu est cherché une fois puis gardé en base,
 // chaque tronçon calculé une fois puis partagé (travel_leg). Les transports coupent la journée : pas de trajet à travers.
 export async function getDayTravel(userId: string, tripId: number, day: string): Promise<DayTravel> {
-  await requireTripRole(userId, tripId, "viewer");
-  await requireTripPass(tripId);
-  const [trip, items, places] = await Promise.all([findTripById(tripId), findTripItems(tripId), findDayItemPlaces(tripId, day)]);
+  // Vérifications et lectures en un seul aller-retour. Rien n'est renvoyé si une vérification échoue, et l'accès
+  // passe avant le pass : un non-membre reçoit 404, jamais 402 (qui dirait que le voyage existe).
+  const [access, pass, ...data] = await Promise.allSettled([
+    requireTripRole(userId, tripId, "viewer"),
+    requireTripPass(tripId),
+    findTripById(tripId),
+    findTripItems(tripId),
+    findDayItemPlaces(tripId, day),
+  ]);
+  if (access.status === "rejected") throw access.reason;
+  if (pass.status === "rejected") throw pass.reason;
+  const [trip, items, places] = data.map((result) => {
+    if (result.status === "rejected") throw result.reason;
+    return result.value;
+  }) as [Awaited<ReturnType<typeof findTripById>>, Awaited<ReturnType<typeof findTripItems>>, ItemPlaceRow[]];
   if (!trip) throw new TripError("NOT_FOUND");
   const area = tripDayAreas(trip, items)(day);
   if (!area) return { legs: [], unlocated: [], pending: [] };
@@ -40,9 +53,12 @@ export async function getDayTravel(userId: string, tripId: number, day: string):
   try {
     const { located, unlocated, pending } = await locateItems(tripId, places, area);
     const pairs = dayPairs(places).filter(([from, to]) => located.has(from.id) && located.has(to.id));
-    const walk = await legsFor(pairs.map(([from, to]) => [located.get(from.id)!, located.get(to.id)!]), "foot-walking");
-    const farIndexes = walk.flatMap((leg, index) => (!leg || leg.distanceMeters > WALK_MAX_METERS ? [index] : []));
-    const drive = await legsFor(farIndexes.map((index) => [located.get(pairs[index][0].id)!, located.get(pairs[index][1].id)!]), "driving-car");
+    const points = pairs.map(([from, to]): [GeoPoint, GeoPoint] => [located.get(from.id)!, located.get(to.id)!]);
+    const farIndexes = points.flatMap(([from, to], index) => (straightMeters(from, to) > DRIVE_FROM_METERS ? [index] : []));
+    const [walk, drive] = await Promise.all([
+      legsFor(points, "foot-walking"),
+      legsFor(farIndexes.map((index) => points[index]), "driving-car"),
+    ]);
 
     return {
       legs: pairs.map(([from, to], index) => {
@@ -157,6 +173,13 @@ async function legsFor(pairs: [GeoPoint, GeoPoint][], profile: TravelProfile): P
   return keys.map((key) => (samePoint(key) ? { ...key, durationSeconds: 0, distanceMeters: 0 } : (known.get(id(key)) ?? null)));
 }
 
+// Distance à vol d'oiseau (haversine).
+function straightMeters(a: GeoPoint, b: GeoPoint) {
+  const rad = (value: number) => (value * Math.PI) / 180;
+  const h = Math.sin(rad(b.latitude - a.latitude) / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(rad(b.longitude - a.longitude) / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
+}
+
 function samePoint(key: LegKey) {
   return key.fromLatitude === key.toLatitude && key.fromLongitude === key.toLongitude;
 }
@@ -176,7 +199,8 @@ const GENERIC_WORDS = new Set(
     "musee museum museo temple sanctuaire shrine jinja restaurant resto hotel hostel auberge ryokan visite visit dejeuner " +
     "diner lunch dinner breakfast balade promenade walk check parc park jardin garden gare station market marche quartier " +
     "district tour tower place square street rue avenue cafe bar art arts ramen sushi izakaya bistro brasserie pub " +
-    "pizzeria trattoria boulangerie bakery plage beach the les des une aux sur dans pour " +
+    "pizzeria trattoria boulangerie bakery plage beach retour depart arrivee installation nuit soiree matin " +
+    "apres midi temps libre repos the les des une aux sur dans pour " +
     "avec and of at in to du la le et au en vers chez centre center city ville grand grande petit old new"
   ).split(" "),
 );
