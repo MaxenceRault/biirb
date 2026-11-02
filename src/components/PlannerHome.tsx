@@ -9,6 +9,7 @@ import { TripInvitations } from "@/components/TripInvitations";
 import { Card } from "@/components/ui/Card";
 import { FormError } from "@/components/ui/FormError";
 import { Icon } from "@/components/ui/Icon";
+import { CurrentTripCard } from "@/components/CurrentTripCard";
 import { TripCard, type TripSummary } from "@/components/TripCard";
 import { TripContextBar } from "@/components/TripContextBar";
 import type { Archetype } from "@/lib/posts";
@@ -77,6 +78,8 @@ export function PlannerHome({ archetypes }: { archetypes: readonly Archetype[] }
 
   return (
     <div className="flex flex-col gap-10">
+      <CurrentTripCard />
+
       <header className="flex flex-col gap-2">
         <h1 className="font-display text-display-lg-mobile text-ink md:text-display-lg">{t("heading")}</h1>
         <p className="max-w-2xl text-body-md text-ink-soft">{t("subheading")}</p>

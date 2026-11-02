@@ -32,11 +32,16 @@ type Expense = {
   is_reimbursement: boolean;
   editable: boolean;
   shares: { participant_id: number; weight: number; share_minor: number }[];
+  // Montant dans la devise affichée (taux BCE du jour de la dépense).
+  display_minor: number;
 };
 type PaymentTask = { id: number; label: string; estimated_minor: number | null; assignee_id: number | null; done: boolean };
 type Ledger = {
   role: TripRole;
   currency: string;
+  // Devise des totaux, soldes, équilibrage et budget ; choix proposés (devise du voyage et des dépenses).
+  displayCurrency: string;
+  displayCurrencies: string[];
   me: number | null;
   participants: Participant[];
   expenses: Expense[];
@@ -72,6 +77,26 @@ const CATEGORY_ICONS: Record<Category, IconName> = {
 // Formulaire ouvert : nouvelle dépense, modification, ou règlement d'une ligne « à payer ».
 type Draft = { expense?: Expense; task?: PaymentTask };
 
+// Devise d'affichage choisie, propre à ce navigateur (confort de lecture : les comptes de référence ne changent pas).
+const displayKey = (tripId: string) => `biirb-expenses-display:${tripId}`;
+
+function readDisplay(tripId: string) {
+  try {
+    return window.localStorage.getItem(displayKey(tripId));
+  } catch {
+    return null;
+  }
+}
+
+function saveDisplay(tripId: string, currency: string | null) {
+  try {
+    if (currency) window.localStorage.setItem(displayKey(tripId), currency);
+    else window.localStorage.removeItem(displayKey(tripId));
+  } catch {
+    // Stockage indisponible (navigation privée) : le choix vaut pour cette visite seulement.
+  }
+}
+
 export function TripExpenses({ tripId }: { tripId: string }) {
   const t = useTranslations("Planner.expenses");
   const router = useRouter();
@@ -79,6 +104,8 @@ export function TripExpenses({ tripId }: { tripId: string }) {
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [error, setError] = useState<ExpenseError | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [display, setDisplay] = useState<string | null>(() => readDisplay(tripId));
+  const ledgerPath = `${basePath}/expenses${display ? `?${new URLSearchParams({ display })}` : ""}`;
 
   const fail = useCallback(
     (code: string) => {
@@ -89,14 +116,34 @@ export function TripExpenses({ tripId }: { tripId: string }) {
   );
 
   useEffect(() => {
-    apiFetch<Ledger>(`${basePath}/expenses`).then((result) => ("data" in result ? setLedger(result.data) : fail(result.error)));
-  }, [basePath, fail]);
+    apiFetch<Ledger>(ledgerPath).then((result) => {
+      if ("data" in result) return setLedger(result.data);
+      // Devise retenue qui n'est plus proposée (dépense supprimée) : retour à la devise du voyage.
+      if (display && result.error === "INVALID_INPUT") {
+        saveDisplay(tripId, null);
+        return setDisplay(null);
+      }
+      fail(result.error);
+    });
+  }, [ledgerPath, display, tripId, fail]);
+
+  function chooseDisplay(currency: string) {
+    const next = ledger && currency === ledger.currency ? null : currency;
+    saveDisplay(tripId, next);
+    setDisplay(next);
+  }
 
   async function mutate(path: string, method: string, body?: unknown) {
     setError(null);
     const result = await apiFetch<Ledger>(`${basePath}${path}`, { method, body });
     if ("data" in result) {
-      setLedger(result.data);
+      // Les modifications renvoient les comptes dans la devise du voyage : relus dans la devise affichée.
+      if (display && display !== result.data.currency) {
+        const shown = await apiFetch<Ledger>(ledgerPath);
+        setLedger("data" in shown ? shown.data : result.data);
+      } else {
+        setLedger(result.data);
+      }
       return true;
     }
     fail(result.error);
@@ -113,6 +160,32 @@ export function TripExpenses({ tripId }: { tripId: string }) {
       {error && (
         <div role="alert">
           <FormError>{t(`errors.${error}`)}</FormError>
+        </div>
+      )}
+      {ledger.displayCurrencies.length > 1 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <span id="expenses-display-label" className="font-display text-label-lg text-ink">
+            {t("display.label")}
+          </span>
+          <div role="radiogroup" aria-labelledby="expenses-display-label" className="flex gap-1 rounded-lg bg-surface-muted p-1">
+            {ledger.displayCurrencies.map((code) => (
+              <button
+                key={code}
+                type="button"
+                role="radio"
+                aria-checked={ledger.displayCurrency === code}
+                onClick={() => chooseDisplay(code)}
+                className={`rounded-lg px-3 py-1.5 font-display text-label-md transition focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:outline-none ${
+                  ledger.displayCurrency === code ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink"
+                }`}
+              >
+                {code}
+              </button>
+            ))}
+          </div>
+          {ledger.displayCurrency !== ledger.currency && (
+            <span className="text-label-sm text-ink-soft">{t("display.hint", { currency: ledger.currency })}</span>
+          )}
         </div>
       )}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
@@ -168,7 +241,7 @@ function ExpenseList({
   const t = useTranslations("Planner.expenses");
   const confirm = useConfirm();
   const format = useFormatter();
-  const money = useMoney(ledger.currency);
+  const money = useMoney(ledger.displayCurrency);
 
   return (
     <Card className="flex flex-col gap-4 p-6">
@@ -196,8 +269,8 @@ function ExpenseList({
               </span>
             </div>
             <div className="flex shrink-0 flex-col items-end">
-              <span className="font-display text-label-lg text-ink">{money(expense.base_amount_minor)}</span>
-              {expense.currency !== ledger.currency && (
+              <span className="font-display text-label-lg text-ink">{money(expense.display_minor)}</span>
+              {expense.currency !== ledger.displayCurrency && (
                 <span className="text-label-sm text-ink-soft">{money(expense.amount_minor, expense.currency)}</span>
               )}
             </div>
@@ -433,8 +506,10 @@ function BalancesCard({
   mutate: (path: string, method: string, body?: unknown) => Promise<boolean>;
 }) {
   const t = useTranslations("Planner.expenses");
-  const money = useMoney(ledger.currency);
+  const money = useMoney(ledger.displayCurrency);
   const canEdit = ledger.role !== "viewer";
+  // Un remboursement s'enregistre dans la devise du voyage, celle qui fait foi pour tout le groupe.
+  const converted = ledger.displayCurrency !== ledger.currency;
 
   return (
     <Card className="flex flex-col gap-4 p-6">
@@ -466,7 +541,7 @@ function BalancesCard({
                   strong: (chunks) => <strong className="font-semibold">{chunks}</strong>,
                 })}
               </span>
-              {(canEdit || settlement.from === ledger.me) && (
+              {!converted && (canEdit || settlement.from === ledger.me) && (
                 <Button size="sm" variant="secondary" className="gap-1.5 self-end" onClick={() => void mutate("/settlements", "POST", settlement)}>
                   <Icon name="check" className="size-4" />
                   {t("markPaid")}
@@ -475,6 +550,9 @@ function BalancesCard({
             </li>
           ))}
         </ul>
+      )}
+      {converted && ledger.settlements.length > 0 && (
+        <p className="text-label-sm text-ink-soft">{t("display.settleHint", { currency: ledger.currency })}</p>
       )}
     </Card>
   );
@@ -644,7 +722,7 @@ function CurrencyPicker({ ledger, mutate }: { ledger: Ledger; mutate: (path: str
 
 function BudgetComparison({ ledger }: { ledger: Ledger }) {
   const t = useTranslations("Planner.expenses");
-  const money = useMoney(ledger.currency);
+  const money = useMoney(ledger.displayCurrency);
   const categories = EXPENSE_CATEGORIES.filter((category) => category !== "other");
 
   return (

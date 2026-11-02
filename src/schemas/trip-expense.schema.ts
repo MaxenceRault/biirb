@@ -83,3 +83,6 @@ export type ExpenseInput = z.infer<typeof expenseSchema>;
 export type SettlementInput = z.infer<typeof settlementSchema>;
 export type PaymentTaskInput = z.infer<typeof paymentTaskSchema>;
 export type UpdatePaymentTaskInput = z.infer<typeof updatePaymentTaskSchema>;
+
+// GET /api/v1/trips/[id]/expenses?display= : devise d'affichage des comptes (celle du voyage ou d'une dépense).
+export const ledgerQuerySchema = z.strictObject({ display: z.enum(CURRENCIES).optional() });

@@ -1,5 +1,5 @@
 import "server-only";
-import { getExchangeRate } from "@/server/infra/exchangeRates";
+import { getEuroRates, getExchangeRate } from "@/server/infra/exchangeRates";
 import { findTripById } from "@/server/repositories/trip.repository";
 import {
   deleteExpense as deleteExpenseRow,
@@ -45,9 +45,10 @@ export class TripExpenseError extends Error {
 // Catégorie de dépense → poste du budget prévisionnel (trip.budget_*, en euros).
 const BUDGET_KEYS = { lodging: "budget_lodging", transport: "budget_transit", food: "budget_dining", activity: "budget_activities" } as const;
 
-export async function getLedger(userId: string, tripId: number) {
+// display : devise d'affichage choisie par l'utilisateur (devise du voyage ou d'une dépense), sinon la devise du voyage.
+export async function getLedger(userId: string, tripId: number, display?: string) {
   const role = await requireTripRole(userId, tripId, "viewer");
-  return buildLedger(userId, tripId, role);
+  return buildLedger(userId, tripId, role, display);
 }
 
 // Lecteur : seulement des dépenses qu'il a payées lui-même.
@@ -230,6 +231,29 @@ async function prepareExpense(
   };
 }
 
+// Comptes dans une autre devise : chaque dépense au taux BCE du jour où elle a été payée (une table en euros par jour).
+// Payée dans la devise affichée : son montant exact. Parts réparties au plus fort reste : leur somme vaut le montant.
+async function convertExpenses(expenses: ExpenseRow[], base: string, shown: string) {
+  const days = [...new Set(expenses.map((expense) => expense.spent_on))];
+  let tables: Map<string, Record<string, number>>;
+  try {
+    tables = new Map(await Promise.all(days.map(async (day) => [day, await getEuroRates(day)] as const)));
+  } catch (error) {
+    logError("trips.rates", error);
+    throw new TripExpenseError("RATE_UNAVAILABLE");
+  }
+  return expenses.map((expense) => {
+    const rates = tables.get(expense.spent_on)!;
+    if (!rates[base] || !rates[shown]) throw new TripExpenseError("RATE_UNAVAILABLE");
+    const amount =
+      expense.currency === shown
+        ? Number(expense.amount_minor)
+        : Math.round((Number(expense.base_amount_minor) / 10 ** currencyDecimals(base)) * (rates[shown] / rates[base]) * 10 ** currencyDecimals(shown));
+    const shares = expense.shares.map((share) => Number(share.share_minor));
+    return { amount, shares: shares.some((share) => share > 0) ? allocate(amount, shares) : shares };
+  });
+}
+
 // Plus forts restes : la somme des parts vaut exactement le total. BigInt : poids × montant peut dépasser 2^53.
 export function allocate(total: number, weights: number[]): number[] {
   const scaled = weights.map((weight) => BigInt(Math.round(weight * 100)));
@@ -266,7 +290,7 @@ export function settlements(balances: { participant_id: number; balance: number 
   return transfers;
 }
 
-async function buildLedger(userId: string, tripId: number, role: TripAccessRole) {
+async function buildLedger(userId: string, tripId: number, role: TripAccessRole, display?: string) {
   await ensureAccountParticipants(tripId);
   const [trip, participants, expenses, paymentTasks] = await Promise.all([
     findTripById(tripId),
@@ -276,15 +300,23 @@ async function buildLedger(userId: string, tripId: number, role: TripAccessRole)
   ]);
   if (!trip) throw new TripExpenseError("NOT_FOUND");
   const currency = await requireCurrency(tripId);
+  // Devises proposées à l'affichage : celle du voyage et celles des dépenses (toutes publiées par la BCE).
+  const currencies = [currency, ...new Set(expenses.map((expense) => expense.currency))].filter((code, index, all) => all.indexOf(code) === index);
+  if (display && !currencies.includes(display)) throw new TripExpenseError("INVALID_INPUT");
+  const shown = display ?? currency;
+  const converted = shown === currency ? null : await convertExpenses(expenses, currency, shown);
 
   const paid = new Map<number, number>();
   const owed = new Map<number, number>();
   const spentByCategory: Record<string, number> = {};
   let total = 0;
-  for (const expense of expenses) {
-    const amount = Number(expense.base_amount_minor);
+  for (const [index, expense] of expenses.entries()) {
+    const amount = converted ? converted[index].amount : Number(expense.base_amount_minor);
     paid.set(expense.paid_by, (paid.get(expense.paid_by) ?? 0) + amount);
-    for (const share of expense.shares) owed.set(share.participant_id, (owed.get(share.participant_id) ?? 0) + Number(share.share_minor));
+    expense.shares.forEach((share, position) => {
+      const part = converted ? converted[index].shares[position] : Number(share.share_minor);
+      owed.set(share.participant_id, (owed.get(share.participant_id) ?? 0) + part);
+    });
     if (!expense.is_reimbursement) {
       total += amount;
       spentByCategory[expense.category] = (spentByCategory[expense.category] ?? 0) + amount;
@@ -297,23 +329,30 @@ async function buildLedger(userId: string, tripId: number, role: TripAccessRole)
     balance: (paid.get(participant.id) ?? 0) - (owed.get(participant.id) ?? 0),
   }));
 
-  // Budget prévisionnel en euros : comparé au réel seulement si le voyage est en euros.
-  const budget =
-    currency === "EUR"
-      ? Object.fromEntries(Object.entries(BUDGET_KEYS).map(([category, key]) => [category, trip[key] * 100]))
-      : null;
+  // Budget prévisionnel saisi en euros : converti au dernier taux (c'est une prévision, pas un paiement daté).
+  const euroRate = shown === "EUR" ? 1 : await getEuroRates("latest").then((rates) => rates[shown]).catch(() => undefined);
+  const budget = euroRate
+    ? Object.fromEntries(
+        Object.entries(BUDGET_KEYS).map(([category, key]) => [category, Math.round(trip[key] * euroRate * 10 ** currencyDecimals(shown))]),
+      )
+    : null;
 
   return {
     role,
     currency,
+    // Devise des totaux, soldes, équilibrage et budget ci-dessous ; displayCurrencies : choix proposés.
+    displayCurrency: shown,
+    displayCurrencies: currencies,
     me: participants.find((participant) => participant.user_id === userId)?.id ?? null,
     participants,
-    expenses: expenses.map((expense) => ({
+    expenses: expenses.map((expense, index) => ({
       ...expense,
       amount_minor: Number(expense.amount_minor),
       base_amount_minor: Number(expense.base_amount_minor),
       rate: Number(expense.rate),
       shares: expense.shares.map((share) => ({ ...share, weight: Number(share.weight), share_minor: Number(share.share_minor) })),
+      // Montant dans la devise affichée (taux du jour de la dépense).
+      display_minor: converted ? converted[index].amount : Number(expense.base_amount_minor),
       // Ce que l'utilisateur peut modifier (affichage des boutons côté client).
       editable: role !== "viewer" || expense.created_by === userId,
     })),

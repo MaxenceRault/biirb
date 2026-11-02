@@ -4,6 +4,7 @@ import { cache, Suspense } from "react";
 import { getTranslations } from "next-intl/server";
 import { Footer } from "@/components/Footer";
 import { Navbar } from "@/components/Navbar";
+import { CurrentTripCard } from "@/components/CurrentTripCard";
 import { FeedFilterLink } from "@/components/FeedFilterLink";
 import { FeedList } from "@/components/FeedList";
 import { HomeHero } from "@/components/HomeHero";
@@ -39,6 +40,10 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       <Navbar />
 
       <main className="relative w-full flex-1 pt-24 pb-20">
+        {/* Connectés : le voyage en cours (programme du jour, Biirbou) ou le prochain, avant les récits. */}
+        <div className="mx-auto max-w-300 px-4 md:px-6">
+          <CurrentTripCard className="mb-8" />
+        </div>
         <Suspense fallback={<HeroSkeleton />}>
           <Hero searchParams={searchParams} />
         </Suspense>
