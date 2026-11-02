@@ -1,4 +1,5 @@
 import "server-only";
+import { trackServerEvent } from "@/server/services/analytics.service";
 import { Type, type Schema } from "@google/genai";
 import { getTranslations } from "next-intl/server";
 import { z } from "zod";
@@ -225,6 +226,15 @@ export async function createTrip(userId: string, input: CreateTripInput): Promis
     await deleteTripRow(tripId).catch(() => {});
     throw error;
   }
+  await Promise.all([
+    trackServerEvent("trip_created", {
+      archetype: archetype.slug,
+      days: tripLength(input.startDate, input.endDate),
+      destinations: destinations.length,
+      travelers: input.travelers,
+    }),
+    trackServerEvent("ai_generation_completed", { kind: "trip" }),
+  ]);
   return { id: publicId };
 }
 
@@ -234,6 +244,7 @@ export async function regenerateTrip(userId: string, tripId: number) {
   await chargeAiCall(userId, tripId);
   const generated = await generatePlan({ ...tripContext(trip), posts: await postsForTrip(trip) });
   await replaceTripPlan(tripId, generated.plan);
+  await trackServerEvent("ai_generation_completed", { kind: "regenerate" });
 }
 
 // Pass voyage : remplace seulement les activités d'un jour, en tenant compte des autres jours.
@@ -246,6 +257,7 @@ export async function regenerateTripDay(userId: string, tripId: number, day: str
   const [items, posts] = await Promise.all([findTripItems(tripId), postsForTrip(trip)]);
   const dayItems = await generateDay({ ...tripContext(trip), posts, day, otherItems: items.filter((item) => item.day !== day) });
   await replaceTripDayItems(tripId, day, dayItems);
+  await trackServerEvent("ai_generation_completed", { kind: "day" });
   return getTrip(userId, tripId);
 }
 
@@ -362,6 +374,7 @@ export async function sendTripMessage(userId: string, tripId: number, content: s
   });
 
   await insertTripExchange(tripId, userId, { user_content: content, ...answer });
+  await trackServerEvent("ai_generation_completed", { kind: "chat" });
   return findTripMessages(tripId);
 }
 

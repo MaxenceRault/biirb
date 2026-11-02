@@ -22,7 +22,7 @@ messages/
 └── fr.json                    # Textes de l'interface (i18n, seule langue pour l'instant)
 src/
 ├── app/
-│   ├── layout.tsx             # Layout global (Navbar + Footer + Fonts) + fond de toutes les pages : courbes de niveau (public/topo.svg)
+│   ├── layout.tsx             # Layout global (Navbar + Footer + Fonts) + fond de toutes les pages : courbes de niveau (public/topo.svg) + balise Umami (mesure d'audience)
 │   ├── page.tsx               # Homepage : feed, ou résultats de recherche si /?q= (lieux, puis titres, puis textes)
 │   ├── post/[slug]/page.tsx   # Détail d'un récit : /post/<slug> (ancien lien /post/<id> → redirection 308)
 │   ├── legal/[page]/page.tsx  # CGU, CGV, mentions légales, confidentialité (textes dans messages/fr.json → Legal)
@@ -69,7 +69,7 @@ src/
 │   ├── controllers/           # Couche CONTROLLER : validation Zod, auth, rate limit, appel du service, réponse HTTP
 │   ├── services/              # Couche SERVICE : logique métier (ex. post.service.ts)
 │   ├── repositories/          # Couche REPOSITORY : accès base de données (Cloud SQL) et Cloud Storage uniquement
-│   ├── infra/                 # Clients GCP : db.ts (Cloud SQL, auth IAM), storage.ts (Cloud Storage), ai.ts (Gemini sur Vertex AI, sortie JSON imposée)
+│   ├── infra/                 # Clients GCP : db.ts (Cloud SQL, auth IAM), storage.ts (Cloud Storage), ai.ts (Gemini sur Vertex AI, sortie JSON imposée), analytics.ts (événements Umami envoyés par le serveur)
 │   ├── config.ts              # Configuration serveur : lit et valide (Zod) les variables d'environnement (getConfig)
 │   ├── jwt.ts                 # Signature / vérification JWT (jose)
 │   ├── rateLimit.ts           # Rate limit en mémoire + IP du client (clientIp)
@@ -83,12 +83,14 @@ src/
 │   ├── session.ts             # Access token en mémoire, refresh via le cookie httpOnly, appels API (apiFetch ajoute le Bearer)
 │   ├── reactions-store.ts     # Likes / enregistrements partagés entre pages et onglets (PostReactions)
 │   ├── tripExport.ts          # Export CSV du planning
+│   ├── analytics.ts           # trackEvent : événement Umami (attend le chargement du script, abandonné s'il est bloqué)
 │   └── hooks/                 # useDismiss (fermeture d'un menu au clic extérieur / Échap), usePlaceSearch (recherche de lieux)
 ├── lib/                       # PARTAGÉ (serveur et navigateur) : ni secret ni API du navigateur ; n'importe ni src/server ni src/client
 │   ├── posts.ts               # Types du feed (FeedPost, FeedPage) et type de récit (Archetype : slug + libellé)
 │   ├── roles.ts               # Rôles des utilisateurs (USER_ROLES) : traveler, globetrotter, dreamer, patron (badges) et admin
 │   ├── country.ts             # Drapeau emoji et nom du pays à partir du code pays
 │   ├── fileName.ts            # Nom de fichier ASCII d'un export (CSV, PDF, .ics)
+│   ├── analytics.ts           # Noms des événements d'audience (AnalyticsEvent) et type de leurs données
 │   └── legal.ts               # Versions des CGU / CGV (preuve des consentements), liste des pages légales
 ├── proxy.ts                   # Middleware Next 16 : redirige (308) les anciens liens /post/{id} vers /post/{slug} ; refuse sans token valide les routes API privées (/api/v1/users/*, /api/v1/posts/* sauf GET /api/v1/posts et GET /api/v1/users/{pseudo}, /api/v1/trips/*)
 ├── types/
@@ -130,6 +132,7 @@ src/
 │   ├── ServiceWorkerRegister.tsx # Enregistre public/sw.js (production uniquement)
 │   ├── FeedList.tsx           # Feed à chargement infini (client : GET /api/v1/posts?cursor=)
 │   ├── ShareButton.tsx        # Partage du lien (menu natif ou copie dans le presse-papiers)
+│   ├── TrackEvent.tsx         # Émet un événement d'audience une fois à l'affichage (client) : story_viewed
 │   ├── PostReactions.tsx      # Boutons J'aime / Enregistrer (connecté) ; visiteur : nombre de likes seul
 │   ├── NewPostButton.tsx      # Bouton flottant « Nouveau post » de l'accueil (connecté uniquement)
 │   ├── StoryCard.tsx          # Carte d'un récit dans une grille (profil, page d'un lieu)
@@ -266,4 +269,5 @@ Seuls les must-have sont exigés : ne pas implémenter les nice-to-have (OAuth/O
 - **Dépenses (Tricount)** : participants = comptes du voyage + invités sans compte. Montants en unités mineures de leur devise (0 décimale : JPY, KRW, ISK) ; conversion dans la devise du voyage au taux BCE du jour de la dépense (`server/infra/exchangeRates.ts`, API Frankfurter, sans clé), **taux figé** à la saisie. Parts calculées au centime (plus forts restes, somme exacte). Équilibrage = minimum de virements ; « marquer comme remboursé » crée une dépense de remboursement. Devise du voyage modifiable tant qu'aucune dépense n'existe.
 - **Consentements** (`src/lib/legal.ts`, pages `/legal/{terms,sales,notice,privacy}`, textes dans `messages/fr.json` → `Legal`) : CGU à l'inscription (`users.terms_version` / `terms_accepted_at`), CGV + renonciation au droit de rétractation avant le lien de paiement du pass (commande, puis copiés dans `trip_pass`). Cases jamais pré-cochées, exigées par le schéma Zod côté serveur. Changer un texte = changer sa version dans `LEGAL_VERSIONS`. `LEGAL_DRAFT` affiche un bandeau tant que les textes ne sont pas validés.
 - **Pass voyage** (9,99 € par défaut, `BMC_TRIP_PASS_*`) : article « Extra » Buy Me a Coffee, **par voyage**, profite à tous ses membres. Le propriétaire commande (`trip_pass_order`, 24 h, une par compte) puis paie avec l'email de son compte ; le webhook signé `extra_purchase.created` (bon article, montant ≥ prix, en euros) crée le `trip_pass` ; `extra_purchase.refunded` le retire. Le lien de paiement n'apparaît qu'après avoir confirmé payer avec l'email du compte. Achat sans compte ou sans commande : gardé « à rattacher » (`trip_id` null, jamais perdu) ; email du paiement jamais en clair (empreinte HMAC + aperçu masqué). L'admin (onglet Pass voyage) rattache un achat seulement si l'email déclaré par l'acheteur correspond à l'empreinte, offre ou retire un pass (journal). Débloque : quota IA plus haut sur ce voyage (`AI_DAILY_LIMIT_TRIP_PASS`, 100 par jour) et discussion de 200 messages, re-générer un jour, export PDF et .ics, liens Google Maps par jour. Le pass est **toujours vérifié côté serveur** (`requireTripPass`, 402 `PASS_REQUIRED`) : l'interface ne fait qu'afficher. Le rôle mécène reste réservé aux dons.
+- **Mesure d'audience** : **Umami Cloud** (sans cookie ni stockage dans le navigateur, respecte Do Not Track), balise dans `layout.tsx` si `UMAMI_WEBSITE_ID` (`getAnalyticsConfig()`, lue au build : argument du build Docker **et** variable Cloud Run). Query et fragment de l'URL jamais envoyés (`data-exclude-search`, `data-exclude-hash` : recherches, UUID de voyage, code d'invitation, code du mot de passe oublié), domaine limité à `APP_URL`. Jamais d'email, de pseudo ni d'identifiant dans un événement. Événements serveur : `trackServerEvent` (`analytics.service.ts`), sans IP ni User-Agent du visiteur, attendus (2 s max) mais jamais bloquants ; User-Agent fixe qui passe le filtre anti-robots d'Umami (sinon ignorés sans erreur). Revenu : données `revenue` + `currency`.
 - **Hors ligne (PWA)** : `public/sw.js` (production uniquement) met en cache les pages `/planner*`, les GET `/api/v1/trips*` et les fichiers `/_next/static` ; consultation seule. Pages et données ne sont gardées qu'avec « Se souvenir de moi » (repère `brb-remembered` posé par `session.ts`, sinon purgées et jamais servies) ; vidées à la déconnexion et au changement de compte.

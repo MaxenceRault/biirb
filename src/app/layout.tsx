@@ -1,6 +1,8 @@
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { getAnalyticsConfig } from "@/server/config";
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
+import Script from "next/script";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getTranslations } from "next-intl/server";
 import "./globals.css";
@@ -26,6 +28,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const locale = await getLocale();
+  const analytics = getAnalyticsConfig();
 
   return (
     <html
@@ -41,6 +44,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         />
         <NextIntlClientProvider>{children}</NextIntlClientProvider>
         <ServiceWorkerRegister />
+        {/* Sans query ni fragment : ils portent des recherches, l'UUID d'un voyage, le code d'invitation et celui du mot de passe oublié. */}
+        {analytics && (
+          <Script
+            src="https://cloud.umami.is/script.js"
+            data-website-id={analytics.websiteId}
+            data-domains={analytics.domain ?? undefined}
+            data-exclude-search="true"
+            data-exclude-hash="true"
+            data-do-not-track="true"
+          />
+        )}
       </body>
     </html>
   );

@@ -14,6 +14,7 @@ import { ProfileAvatarLink, ProfileNameLink, profileHref } from "@/components/Pr
 import { ReportButton } from "@/components/ReportButton";
 import { RoleBadge } from "@/components/RoleBadge";
 import { ShareButton } from "@/components/ShareButton";
+import { TrackEvent } from "@/components/TrackEvent";
 import { Avatar } from "@/components/ui/Avatar";
 import { buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -88,6 +89,7 @@ async function PostContent({ params }: Pick<PageProps<"/post/[slug]">, "params">
 
   return (
     <>
+      <TrackEvent event="story_viewed" data={{ archetype: post.archetype.slug, country: destination.countryCode }} />
       {/* Photo du récit en haut de page : floutée, elle s'efface vers le bas et laisse place au fond global.
           absolute (et non fixed) : elle défile avec la page. */}
       <div
