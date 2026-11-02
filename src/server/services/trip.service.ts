@@ -91,6 +91,7 @@ export class TripError extends Error {
 
 // Taille du prompt : coût et temps de réponse.
 const MAX_SOURCE_POSTS = 15;
+const SOURCE_POST_CRITERIA = ["like_rank", "recent_rank", "random_rank"] as const;
 const MAX_ITEMS_PER_DAY = 8;
 // Au-delà d'un mois, journées allégées : la réponse du modèle reste dans son temps et sa taille maximum.
 const DETAILED_TRIP_MAX_DAYS = 31;
@@ -575,8 +576,10 @@ function postsForTrip(trip: TripRow) {
   return postsForDestinations(tripDestinations(trip), trip.archetype_id);
 }
 
-// Récits de chaque étape, pris à tour de rôle (sans doublon) : chaque étape est représentée dans les 15 envoyés à l'IA.
+// 15 récits envoyés à l'IA : les 5 plus aimés, puis les 5 plus récents, puis 5 au hasard parmi les autres (moins de
+// récits disponibles : tous). Pour chaque critère, les étapes sont prises à tour de rôle : chacune est représentée.
 async function postsForDestinations(destinations: TripDestinationRow[], archetypeId: number) {
+  // 15 par critère et par étape : une seule étape suffit à remplir les 3 critères malgré les récits déjà pris.
   const lists = await Promise.all(
     destinations.map((place) =>
       findPostsForTrip({ country: place.country_code, state: place.state_code ?? undefined, city: place.city ?? undefined }, archetypeId, MAX_SOURCE_POSTS),
@@ -584,11 +587,15 @@ async function postsForDestinations(destinations: TripDestinationRow[], archetyp
   );
   const seen = new Set<number>();
   const posts: PostForTrip[] = [];
-  for (let index = 0; posts.length < MAX_SOURCE_POSTS && lists.some((list) => index < list.length); index++) {
-    for (const post of lists.map((list) => list[index])) {
-      if (!post || seen.has(post.id) || posts.length >= MAX_SOURCE_POSTS) continue;
-      seen.add(post.id);
-      posts.push(post);
+  for (const rank of SOURCE_POST_CRITERIA) {
+    const sorted = lists.map((list) => list.filter((post) => post[rank] <= MAX_SOURCE_POSTS).sort((a, b) => a[rank] - b[rank]));
+    const quota = posts.length + MAX_SOURCE_POSTS / SOURCE_POST_CRITERIA.length;
+    for (let index = 0; posts.length < quota && sorted.some((list) => index < list.length); index++) {
+      for (const post of sorted.map((list) => list[index])) {
+        if (!post || seen.has(post.id) || posts.length >= quota) continue;
+        seen.add(post.id);
+        posts.push(post);
+      }
     }
   }
   return posts;
