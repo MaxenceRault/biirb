@@ -894,6 +894,7 @@ function ItemRow({
 }) {
   const t = useTranslations("Planner");
   const [editing, setEditing] = useState(false);
+  const confirm = useConfirm();
   const [menuOpen, setMenuOpen] = useState(false);
   const card = useRef<HTMLLIElement>(null);
   const menuId = useId();
@@ -917,8 +918,20 @@ function ItemRow({
   const actions = [
     { icon: "sparkles" as const, label: t("item.menu.ask"), run: onAsk },
     { icon: "edit" as const, label: t("item.menu.edit"), run: () => setEditing(true) },
-    { icon: "delete" as const, label: t("item.menu.delete"), run: () => void mutate(`/items/${item.id}`, "DELETE"), danger: true },
+    { icon: "delete" as const, label: t("item.menu.delete"), run: () => void remove(), danger: true },
   ];
+
+  // Une suppression à la main ne s'annule pas (« Annuler » ne concerne que les changements de Biirbou).
+  async function remove() {
+    const confirmed = await confirm({
+      title: t("item.deleteConfirm.title"),
+      message: t("item.deleteConfirm.message", { title: item.title }),
+      confirmLabel: t("item.deleteConfirm.action"),
+      icon: "delete",
+      danger: true,
+    });
+    if (confirmed) await mutate(`/items/${item.id}`, "DELETE");
+  }
 
   // Mobile : toucher l'activité ouvre le menu (les boutons en ligne ne restent qu'à partir de sm). Un lien de la carte
   // (récit source) garde son comportement.
@@ -951,7 +964,7 @@ function ItemRow({
             <IconButton
               icon="delete"
               label={t("item.delete", { title: item.title })}
-              onClick={() => void mutate(`/items/${item.id}`, "DELETE")}
+              onClick={() => void remove()}
             />
           </div>
           {/* Clavier et lecteur d'écran sur mobile : le même menu, sans toucher la carte. */}
