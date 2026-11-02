@@ -275,41 +275,57 @@ export type PostForTrip = {
   destination_state_code: string | null;
   destination_city: string | null;
   tags: { country_code: string; state_code: string | null; city: string | null }[];
+  // Rang du récit selon chaque critère (1 = premier) : likes, date de publication, tirage au sort.
+  like_rank: number;
+  recent_rank: number;
+  random_rank: number;
 };
 
-// Même filtre de lieu que findPostIdsByPlace, plus le type de récit.
+// Même filtre de lieu que findPostIdsByPlace, plus le type de récit : les `perCriterion` premiers récits selon
+// chaque critère (les plus aimés, les plus récents, au hasard), dont le service tire sa sélection.
 export async function findPostsForTrip(
   { country, state, city }: PlaceFilter,
   archetypeId: number,
-  limit: number,
+  perCriterion: number,
 ): Promise<PostForTrip[]> {
   const db = await getDb();
   const { rows } = await db.query<PostForTrip>(
-    `select p.id, p.title, p.short_description, left(p.long_description, 1500) as long_description,
+    `with candidate as (
+       select p.id, p.created_at, (select count(*) from post_like l where l.post_id = p.id) as like_count
+         from post p
+        where p.archetype_id = $4
+          and not p.is_hidden
+          and p.id in (
+            select id from post
+             where destination_country_code = $1
+               and ($2::text is null or destination_state_code = $2)
+               and ($3::text is null or destination_city = $3)
+            union
+            select pt.post_id from post_tag pt join tag t on t.id = pt.tag_id
+             where t.country_code = $1
+               and ($2::text is null or t.state_code = $2)
+               and ($3::text is null or t.city = $3)
+          )
+     ),
+     ranked as (
+       select id,
+         row_number() over (order by like_count desc, created_at desc, id desc)::int as like_rank,
+         row_number() over (order by created_at desc, id desc)::int as recent_rank,
+         row_number() over (order by random())::int as random_rank
+       from candidate
+     )
+     select p.id, p.title, p.short_description, left(p.long_description, 1500) as long_description,
        p.destination_country_code, p.destination_state_code, p.destination_city,
+       r.like_rank, r.recent_rank, r.random_rank,
        coalesce(
          (select json_agg(json_build_object('country_code', t.country_code, 'state_code', t.state_code, 'city', t.city))
             from post_tag pt join tag t on t.id = pt.tag_id
            where pt.post_id = p.id),
          '[]'
        ) as tags
-     from post p
-     where p.archetype_id = $4
-       and not p.is_hidden
-       and p.id in (
-         select id from post
-          where destination_country_code = $1
-            and ($2::text is null or destination_state_code = $2)
-            and ($3::text is null or destination_city = $3)
-         union
-         select pt.post_id from post_tag pt join tag t on t.id = pt.tag_id
-          where t.country_code = $1
-            and ($2::text is null or t.state_code = $2)
-            and ($3::text is null or t.city = $3)
-       )
-     order by p.created_at desc
-     limit $5`,
-    [country, state ?? null, city ?? null, archetypeId, limit],
+     from ranked r join post p on p.id = r.id
+     where r.like_rank <= $5 or r.recent_rank <= $5 or r.random_rank <= $5`,
+    [country, state ?? null, city ?? null, archetypeId, perCriterion],
   );
   return rows;
 }
