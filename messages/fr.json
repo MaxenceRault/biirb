@@ -387,6 +387,17 @@
       "activities": "{count, plural, =0 {Aucune activité} one {# activité} other {# activités}}",
       "loadError": "Impossible de charger vos voyages. Réessayez."
     },
+    "undo": {
+      "messages": {
+        "suggestion": "Proposition de Biirbou appliquée {when}.",
+        "regenerate": "Biirbou a réimaginé le planning {when}.",
+        "regenerate_day": "Biirbou a re-généré un jour {when}."
+      },
+      "hint": "Annulable pendant {hours} h, tant que le planning n'est pas modifié.",
+      "action": "Annuler",
+      "undoing": "Annulation…",
+      "confirmRegenerate": "Annuler remet le planning, la checklist et le budget d'avant la réimagination. Continuer ?"
+    },
     "trip": {
       "route": "Étapes :",
       "travelers": "{count, plural, one {# voyageur} other {# voyageurs}}",
@@ -529,7 +540,9 @@
       "PASS_REQUIRED": "Cette fonction fait partie du pass voyage.",
       "PASS_ALREADY_ACTIVE": "Ce voyage a déjà le pass voyage.",
       "PASS_UNAVAILABLE": "Le pass voyage n'est pas en vente pour le moment.",
-      "SUGGESTION_OUTDATED": "Cette proposition n'est plus valable : l'activité concernée a été modifiée ou supprimée entre-temps."
+      "SUGGESTION_OUTDATED": "Cette proposition n'est plus valable : l'activité concernée a été modifiée ou supprimée entre-temps.",
+      "NOTHING_TO_UNDO": "Il n'y a plus rien à annuler : le délai de 24 heures est passé.",
+      "PLAN_CHANGED": "Le planning a été modifié depuis : ce changement de Biirbou ne peut plus être annulé."
     },
     "pass": {
       "title": "Pass voyage",

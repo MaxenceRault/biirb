@@ -26,7 +26,13 @@ import { buildTripCsv, downloadFile } from "@/client/tripExport";
 import { TripPassCard, TripPassDialog, type TripPass, type TripPassFeature } from "@/components/TripPassCard";
 import { exportFileName } from "@/lib/fileName";
 import { TripTableView } from "@/components/TripTableView";
-import { TRIP_PDF_TEMPLATES, type TripItemColor, type TripPdfTemplate } from "@/schemas/trip.schema";
+import {
+  TRIP_PDF_TEMPLATES,
+  TRIP_UNDO_HOURS,
+  type TripItemColor,
+  type TripPdfTemplate,
+  type TripPlanChangeKind,
+} from "@/schemas/trip.schema";
 import { useDismiss } from "@/client/hooks/useDismiss";
 
 const ITEM_CATEGORIES = ["transport", "lodging", "activity", "food"] as const;
@@ -88,6 +94,8 @@ export type TripDetail = {
   aiQuota: { used: number; limit: number | null };
   // Carte : villes citées dans le planning, avec leurs jours.
   map: TripMapData;
+  // Dernier changement de Biirbou encore annulable (null : rien, délai passé, planning modifié depuis, ou lecteur).
+  undo: { kind: TripPlanChangeKind; created_at: string } | null;
 };
 
 type TripSuggestion = Omit<TripItem, "id" | "color"> & {
@@ -118,6 +126,8 @@ const PLANNER_ERRORS = [
   "AI_UNAVAILABLE",
   "CHAT_LIMIT_REACHED",
   "SUGGESTION_OUTDATED",
+  "NOTHING_TO_UNDO",
+  "PLAN_CHANGED",
   "DAILY_LIMIT_REACHED",
   "AI_DISABLED",
   "FORBIDDEN",
@@ -177,6 +187,9 @@ export function TripPlanner({ tripId }: { tripId: string }) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [error, setError] = useState<PlannerError | null>(null);
   const [regenerating, setRegenerating] = useState(false);
+  const [undoing, setUndoing] = useState(false);
+  // Incrémenté après une annulation : la discussion relit ses propositions (une proposition annulée redevient en attente).
+  const [chatVersion, setChatVersion] = useState(0);
   const [sharing, setSharing] = useState(false);
   const [view, setView] = useState<"plan" | "table" | "expenses">("plan");
   const [passFeature, setPassFeature] = useState<TripPassFeature | null>(null);
@@ -193,12 +206,16 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     });
   }, [router, tripId]);
 
+  async function reloadTrip() {
+    const result = await apiFetch<TripDetail>(basePath);
+    if (!("data" in result)) return null;
+    setState({ status: "ready", data: result.data });
+    return result.data;
+  }
+
   // Après le paiement : true si le pass est maintenant actif.
   async function reloadPass() {
-    const result = await apiFetch<TripDetail>(basePath);
-    if (!("data" in result)) return false;
-    setState({ status: "ready", data: result.data });
-    return result.data.pass.active;
+    return (await reloadTrip())?.pass.active ?? false;
   }
 
   const mutate: Mutate = async (path, method, body) => {
@@ -230,6 +247,17 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     setRegenerating(false);
   }
 
+  // Une réimagination remplace tout le planning : on confirme avant de revenir en arrière.
+  async function undo(kind: TripPlanChangeKind) {
+    if (kind === "regenerate" && !window.confirm(t("undo.confirmRegenerate"))) return;
+    setUndoing(true);
+    const ok = await mutate("/undo", "POST");
+    // Refusée (délai passé, planning modifié depuis) : le voyage relu ne propose plus d'annuler.
+    if (!ok) await reloadTrip();
+    setChatVersion((version) => version + 1);
+    setUndoing(false);
+  }
+
   async function handleDelete() {
     if (!window.confirm(t("trip.deleteConfirm"))) return;
     setError(null);
@@ -250,7 +278,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     );
   }
 
-  const { trip, items, tasks, role, pass, chatLimit, mapsUrls, aiQuota, map } = state.data;
+  const { trip, items, tasks, role, pass, chatLimit, mapsUrls, aiQuota, map, undo: lastChange } = state.data;
   // Lecteur : consultation seule (l'API refuse de toute façon les modifications).
   const canEdit = role !== "viewer";
 
@@ -279,6 +307,8 @@ export function TripPlanner({ tripId }: { tripId: string }) {
       )}
 
       {sharing && <TripSharePanel tripId={tripId} />}
+
+      {canEdit && lastChange && <UndoBanner change={lastChange} pending={undoing} onUndo={() => void undo(lastChange.kind)} />}
 
       {error && (
         <div role="alert">
@@ -331,6 +361,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
           <aside className="flex flex-col gap-6">
             <TripChat
               basePath={basePath}
+              refreshKey={chatVersion}
               trip={trip}
               mutate={mutate}
               canEdit={canEdit}
@@ -1055,6 +1086,7 @@ function BudgetCard({ trip, mutate, canEdit }: { trip: Trip; mutate: Mutate; can
 // Une proposition n'est ajoutée au planning que si l'utilisateur répond oui.
 function TripChat({
   basePath,
+  refreshKey,
   trip,
   mutate,
   canEdit,
@@ -1064,6 +1096,7 @@ function TripChat({
   onUpsell,
 }: {
   basePath: string;
+  refreshKey: number;
   trip: Trip;
   mutate: Mutate;
   canEdit: boolean;
@@ -1099,7 +1132,7 @@ function TripChat({
 
   useEffect(() => {
     void loadMessages();
-  }, [loadMessages]);
+  }, [loadMessages, refreshKey]);
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
@@ -1365,6 +1398,26 @@ function SuggestionCard({
         </span>
       )}
     </li>
+  );
+}
+
+// Dernier changement de Biirbou : « Annuler » restaure le planning d'avant (le plus récent d'abord, pendant TRIP_UNDO_HOURS).
+function UndoBanner({ change, pending, onUndo }: { change: NonNullable<TripDetail["undo"]>; pending: boolean; onUndo: () => void }) {
+  const t = useTranslations("Planner");
+  const format = useFormatter();
+  const now = useNow({ updateInterval: 60_000 });
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-muted px-4 py-3">
+      <Icon name="sparkles" className="size-4.5 shrink-0 text-accent" />
+      <p className="mr-auto text-body-sm text-ink">
+        {t(`undo.messages.${change.kind}`, { when: format.relativeTime(new Date(change.created_at), now) })}{" "}
+        <span className="text-ink-soft">{t("undo.hint", { hours: TRIP_UNDO_HOURS })}</span>
+      </p>
+      <Button size="sm" variant="secondary" disabled={pending} onClick={onUndo} className="gap-1.5">
+        <Icon name="refresh" className="size-4" />
+        {pending ? t("undo.undoing") : t("undo.action")}
+      </Button>
+    </div>
   );
 }
 

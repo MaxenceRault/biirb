@@ -26,12 +26,14 @@ import {
   findTripMessages,
   findTripsByUser,
   findTripTasks,
+  findUndoablePlanChange,
   insertTrip,
   insertTripExchange,
   insertTripItem,
   insertTripTask,
   replaceTripDayItems,
   replaceTripPlan,
+  undoLastPlanChange,
   updateTrip as updateTripRow,
   updateTripItem as updateTripItemRow,
   updateTripTask as updateTripTaskRow,
@@ -70,6 +72,9 @@ export class TripError extends Error {
       | "CHAT_LIMIT_REACHED"
       // L'activité qu'une proposition modifie ou supprime n'existe plus.
       | "SUGGESTION_OUTDATED"
+      // « Annuler » : aucun changement de Biirbou dans le délai, ou planning modifié à la main depuis.
+      | "NOTHING_TO_UNDO"
+      | "PLAN_CHANGED"
       // Quota IA (ai-quota.service).
       | "FORBIDDEN"
       | "AI_DISABLED"
@@ -111,7 +116,13 @@ export async function listTrips(userId: string) {
 // pass : état du pass voyage ; mapsUrls (itinéraire de chaque jour) seulement avec le pass.
 export async function getTrip(userId: string, tripId: number) {
   const { trip, role } = await findTripFor(userId, tripId, "viewer");
-  const [items, tasks, pass] = await Promise.all([findTripItems(tripId), findTripTasks(tripId), getTripPassStatus(tripId)]);
+  const [items, tasks, pass, undo] = await Promise.all([
+    findTripItems(tripId),
+    findTripTasks(tripId),
+    getTripPassStatus(tripId),
+    // Lecteur : ne peut rien annuler.
+    role === "viewer" ? null : findUndoablePlanChange(tripId),
+  ]);
   return {
     trip: publicTrip(trip),
     items,
@@ -123,6 +134,8 @@ export async function getTrip(userId: string, tripId: number) {
     chatLimit: pass.active ? CHAT_MAX_USER_MESSAGES_PASS : CHAT_MAX_USER_MESSAGES,
     mapsUrls: pass.active ? dayMapsUrls(trip, items) : null,
     map: tripMap(trip, items),
+    // Dernier changement de Biirbou encore annulable (null : rien, délai passé ou planning modifié depuis).
+    undo,
   };
 }
 
@@ -221,7 +234,7 @@ export async function createTrip(userId: string, input: CreateTripInput): Promis
   });
 
   try {
-    await replaceTripPlan(tripId, generated.plan);
+    await replaceTripPlan(tripId, generated.plan, { record: false });
   } catch (error) {
     await deleteTripRow(tripId).catch(() => {});
     throw error;
@@ -243,8 +256,17 @@ export async function regenerateTrip(userId: string, tripId: number) {
   const { trip } = await findTripFor(userId, tripId, "editor");
   await chargeAiCall(userId, tripId);
   const generated = await generatePlan({ ...tripContext(trip), posts: await postsForTrip(trip) });
-  await replaceTripPlan(tripId, generated.plan);
+  await replaceTripPlan(tripId, generated.plan, { record: true });
   await trackServerEvent("ai_generation_completed", { kind: "regenerate" });
+}
+
+// Annule le dernier changement de Biirbou (proposition acceptée, re-génération) : le plus récent d'abord, pendant TRIP_UNDO_HOURS.
+export async function undoPlanChange(userId: string, tripId: number) {
+  await findTripFor(userId, tripId, "editor");
+  const result = await undoLastPlanChange(tripId);
+  if (result === "none") throw new TripError("NOTHING_TO_UNDO");
+  if (result === "changed") throw new TripError("PLAN_CHANGED");
+  return getTrip(userId, tripId);
 }
 
 // Pass voyage : remplace seulement les activités d'un jour, en tenant compte des autres jours.

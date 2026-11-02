@@ -18,6 +18,7 @@ import {
   listTrips,
   regenerateTrip,
   regenerateTripDay,
+  undoPlanChange,
   sendTripMessage,
   TripError,
   updateTrip,
@@ -90,6 +91,11 @@ export function regenerateTripController(request: Request, { params }: { params:
     await regenerateTrip(userId, tripId);
     return json(await getTrip(userId, tripId));
   });
+}
+
+// POST /api/v1/trips/[id]/undo : annule le dernier changement de Biirbou.
+export function undoTripPlanController(request: Request, { params }: { params: Params }) {
+  return withTrip(request, params, async (userId, tripId) => json(await undoPlanChange(userId, tripId)));
 }
 
 // POST /api/v1/trips/[id]/days/[day]/regenerate (pass voyage)
@@ -286,6 +292,8 @@ function handleError(error: unknown) {
     if (error.code === "AI_UNAVAILABLE") return errorResponse(503, "AI_UNAVAILABLE");
     if (error.code === "CHAT_LIMIT_REACHED") return errorResponse(429, "CHAT_LIMIT_REACHED");
     if (error.code === "SUGGESTION_OUTDATED") return errorResponse(409, "SUGGESTION_OUTDATED");
+    if (error.code === "NOTHING_TO_UNDO") return errorResponse(404, "NOTHING_TO_UNDO");
+    if (error.code === "PLAN_CHANGED") return errorResponse(409, "PLAN_CHANGED");
     if (error.code === "DAILY_LIMIT_REACHED") return errorResponse(429, "DAILY_LIMIT_REACHED");
     if (error.code === "AI_DISABLED") return errorResponse(503, "AI_DISABLED");
     if (error.code === "FORBIDDEN") return errorResponse(403, "FORBIDDEN");
