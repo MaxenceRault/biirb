@@ -27,7 +27,7 @@ import {
   requireAdmin,
   listTickets,
   setPostHidden,
-  setTicketStatus,
+  updateTicket,
   updateSettings,
   updateUser,
   createDevTicket,
@@ -141,13 +141,13 @@ export function listTicketsController(request: Request) {
   });
 }
 
-// PATCH /api/v1/admin/tickets/[id] { status }
+// PATCH /api/v1/admin/tickets/[id] { status?, priority? }
 export function updateTicketController(request: Request, { params }: Context) {
   return withAdmin(request, async (adminId) => {
     const id = ticketIdSchema.safeParse((await params).id);
     const body = await parseBody(request, adminUpdateTicketSchema);
     if (!id.success || !body) return errorResponse(400, "INVALID_INPUT");
-    await setTicketStatus(adminId, id.data, body.status);
+    await updateTicket(adminId, id.data, body);
     return new Response(null, { status: 204 });
   });
 }

@@ -39,8 +39,8 @@ import {
   insertBannedWord,
 } from "@/server/repositories/banned-word.repository";
 import { clearBannedTermsCache } from "@/server/services/banned-word.service";
-import { findTicketsForAdmin, findTicketsForBoard, updateTicketStatus } from "@/server/repositories/ticket.repository";
-import type { TicketStatus } from "@/schemas/ticket.schema";
+import { findTicketsForAdmin, findTicketsForBoard, updateTicket as updateTicketRow } from "@/server/repositories/ticket.repository";
+import type { TicketPriority, TicketStatus } from "@/schemas/ticket.schema";
 import {
   deleteDevTicket,
   findDevTickets,
@@ -308,10 +308,17 @@ export async function listTickets({ status, page }: { status: TicketStatus | "al
   return { tickets, total, page, pageSize: PAGE_SIZE };
 }
 
-export async function setTicketStatus(adminId: string, ticketId: number, status: TicketStatus) {
-  const updated = await updateTicketStatus(ticketId, status);
+// L'état est vu par l'auteur du ticket ; la priorité reste interne à l'administration.
+export async function updateTicket(adminId: string, ticketId: number, changes: { status?: TicketStatus; priority?: TicketPriority }) {
+  const updated = await updateTicketRow(ticketId, changes);
   if (!updated) throw new AdminError("NOT_FOUND");
-  if (updated.previous !== status) await log(adminId, "ticket.status", "ticket", ticketId, { from: updated.previous, to: status });
+  const { previous } = updated;
+  if (changes.status && changes.status !== previous.status) {
+    await log(adminId, "ticket.status", "ticket", ticketId, { from: previous.status, to: changes.status });
+  }
+  if (changes.priority && changes.priority !== previous.priority) {
+    await log(adminId, "ticket.priority", "ticket", ticketId, { from: previous.priority, to: changes.priority });
+  }
 }
 
 // Kanban : colonne « clôturé » limitée aux plus récents ; plafond des tickets à traiter (taille de la réponse).

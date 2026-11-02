@@ -1159,7 +1159,12 @@ export function buildOpenApiDocument() {
         }),
       },
       "/admin/tickets/{id}": {
-        patch: adminRoute("Changer l'état d'un ticket", { params: [numericIdParam("id")], body: adminUpdateTicketSchema, ok: noContent, description: "Inscrit au journal (état avant / après)." }),
+        patch: adminRoute("Changer l'état ou la priorité d'un ticket", {
+          params: [numericIdParam("id")],
+          body: adminUpdateTicketSchema,
+          ok: noContent,
+          description: "L'état est vu par l'auteur du ticket, la priorité reste interne à l'administration. Inscrit au journal (avant / après).",
+        }),
       },
       "/admin/tickets/board": {
         get: adminRoute("Kanban du support", {

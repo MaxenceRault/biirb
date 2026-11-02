@@ -1,6 +1,6 @@
 import "server-only";
 import { getDb } from "@/server/infra/db";
-import type { TicketCategory, TicketStatus } from "@/schemas/ticket.schema";
+import type { TicketCategory, TicketPriority, TicketStatus } from "@/schemas/ticket.schema";
 
 export type TicketRow = {
   id: number;
@@ -62,18 +62,19 @@ export async function findTicketsForAdmin(
 }
 
 // Kanban : tous les tickets à traiter, et les derniers clôturés seulement (la colonne ne grossit pas sans fin).
-export async function findTicketsForBoard(closedLimit: number, openLimit: number): Promise<AdminTicketRow[]> {
+// priority : réservée à l'admin (jamais dans les requêtes de l'auteur).
+export async function findTicketsForBoard(closedLimit: number, openLimit: number): Promise<(AdminTicketRow & { priority: TicketPriority })[]> {
   const db = await getDb();
-  const { rows } = await db.query<AdminTicketRow>(
-    `(select ${COLUMNS},
+  const { rows } = await db.query<AdminTicketRow & { priority: TicketPriority }>(
+    `(select ${COLUMNS}, t.priority,
         json_build_object('id', u.id, 'username', u.username, 'display_name', u.display_name) as author
       from support_ticket t join users u on u.id = t.user_id
       where t.status <> 'closed'
-      -- Les plus anciens d'abord : à traiter en premier.
-      order by t.created_at
+      -- Priorité haute d'abord, puis les plus anciens (à traiter en premier).
+      order by t.priority desc, t.created_at
       limit $2)
      union all
-     (select ${COLUMNS},
+     (select ${COLUMNS}, t.priority,
         json_build_object('id', u.id, 'username', u.username, 'display_name', u.display_name) as author
       from support_ticket t join users u on u.id = t.user_id
       where t.status = 'closed'
@@ -84,18 +85,18 @@ export async function findTicketsForBoard(closedLimit: number, openLimit: number
   return rows;
 }
 
-// null : ticket inconnu. previous : état avant le changement (journal).
-export async function updateTicketStatus(
+// null : ticket inconnu. previous : état et priorité avant le changement (journal).
+export async function updateTicket(
   id: number,
-  status: TicketStatus,
-): Promise<{ previous: TicketStatus } | null> {
+  changes: { status?: TicketStatus; priority?: TicketPriority },
+): Promise<{ previous: { status: TicketStatus; priority: TicketPriority } } | null> {
   const db = await getDb();
-  const { rows } = await db.query<{ previous: TicketStatus }>(
-    `update support_ticket t set status = $2, updated_at = now()
-     from (select status as previous from support_ticket where id = $1 for update) old
+  const { rows } = await db.query<{ status: TicketStatus; priority: TicketPriority }>(
+    `update support_ticket t set status = coalesce($2, t.status), priority = coalesce($3, t.priority), updated_at = now()
+     from (select status, priority from support_ticket where id = $1 for update) old
      where t.id = $1
-     returning old.previous`,
-    [id, status],
+     returning old.status, old.priority`,
+    [id, changes.status ?? null, changes.priority ?? null],
   );
-  return rows[0] ?? null;
+  return rows[0] ? { previous: rows[0] } : null;
 }

@@ -1,20 +1,21 @@
 import "server-only";
 import { getDb } from "@/server/infra/db";
-import type { BoardColumn, DevTicketPriority } from "@/schemas/dev-ticket.schema";
+import type { BoardColumn } from "@/schemas/dev-ticket.schema";
+import type { TicketPriority } from "@/schemas/ticket.schema";
 
 export type DevTicketRow = {
   id: number;
   title: string;
   description: string | null;
   status: BoardColumn;
-  priority: DevTicketPriority;
+  priority: TicketPriority;
   created_at: string;
   updated_at: string;
   // null : compte de l'auteur supprimé.
   author: { username: string; display_name: string } | null;
 };
 
-export type DevTicketChanges = Partial<{ title: string; description: string | null; status: BoardColumn; priority: DevTicketPriority }>;
+export type DevTicketChanges = Partial<{ title: string; description: string | null; status: BoardColumn; priority: TicketPriority }>;
 
 const COLUMNS = `d.id, d.title, d.description, d.status, d.priority, d.created_at, d.updated_at,
   case when u.id is null then null else json_build_object('username', u.username, 'display_name', u.display_name) end as author`;
@@ -41,7 +42,7 @@ export async function findDevTickets(closedLimit: number, openLimit: number): Pr
 
 export async function insertDevTicket(
   authorId: string,
-  ticket: { title: string; description: string | null; priority: DevTicketPriority },
+  ticket: { title: string; description: string | null; priority: TicketPriority },
 ): Promise<number> {
   const db = await getDb();
   const { rows } = await db.query<{ id: number }>(

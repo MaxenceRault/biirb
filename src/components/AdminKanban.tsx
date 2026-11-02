@@ -6,18 +6,10 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
-import { FIELD_CLASS_NAME, Input } from "@/components/ui/Input";
+import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import {
-  BOARD_COLUMNS,
-  DEV_TICKET_DESCRIPTION_MAX,
-  DEV_TICKET_PRIORITIES,
-  DEV_TICKET_TITLE_MAX,
-  DEV_TICKET_TITLE_MIN,
-  type BoardColumn,
-  type DevTicketPriority,
-} from "@/schemas/dev-ticket.schema";
-import type { TicketCategory, TicketStatus } from "@/schemas/ticket.schema";
+import { BOARD_COLUMNS, DEV_TICKET_DESCRIPTION_MAX, DEV_TICKET_TITLE_MAX, DEV_TICKET_TITLE_MIN, type BoardColumn } from "@/schemas/dev-ticket.schema";
+import { TICKET_PRIORITIES, type TicketCategory, type TicketPriority, type TicketStatus } from "@/schemas/ticket.schema";
 
 // Appel de l'API d'administration (AdminView) : null en cas d'erreur, déjà affichée.
 type Call = <T>(path: string, init?: { method?: string; body?: unknown }) => Promise<T | null>;
@@ -27,6 +19,7 @@ type SupportTicket = {
   subject: string;
   message: string;
   status: TicketStatus;
+  priority: TicketPriority;
   category: TicketCategory;
   created_at: string;
   author: { username: string; display_name: string };
@@ -37,7 +30,7 @@ type DevTicket = {
   title: string;
   description: string | null;
   status: BoardColumn;
-  priority: DevTicketPriority;
+  priority: TicketPriority;
   created_at: string;
   author: { username: string; display_name: string } | null;
 };
@@ -100,6 +93,11 @@ function SupportBoard({ call }: { call: Call }) {
     if ((await call(`/tickets/${id}`, { method: "PATCH", body: { status } })) === null) reload();
   }
 
+  async function prioritize(id: number, priority: TicketPriority) {
+    setTickets((current) => sortByPriority(current?.map((ticket) => (ticket.id === id ? { ...ticket, priority } : ticket)) ?? []));
+    if ((await call(`/tickets/${id}`, { method: "PATCH", body: { priority } })) === null) reload();
+  }
+
   if (!tickets) return <Card className="h-96 animate-pulse bg-surface-muted" aria-hidden="true" />;
 
   return (
@@ -120,6 +118,7 @@ function SupportBoard({ call }: { call: Call }) {
               {t("byAuthor", { name: ticket.author.display_name, username: ticket.author.username })} ·{" "}
               {format.dateTime(new Date(ticket.created_at), { dateStyle: "short" })}
             </p>
+            <PriorityPicker value={ticket.priority} onChange={(priority) => void prioritize(ticket.id, priority)} name={`support-${ticket.id}`} />
           </>
         );
       }}
@@ -137,6 +136,11 @@ function DevBoard({ call }: { call: Call }) {
   async function move(id: number, status: BoardColumn) {
     setTickets((current) => current?.map((ticket) => (ticket.id === id ? { ...ticket, status } : ticket)) ?? null);
     if ((await call(`/dev-tickets/${id}`, { method: "PATCH", body: { status } })) === null) reload();
+  }
+
+  async function prioritize(id: number, priority: TicketPriority) {
+    setTickets((current) => sortByPriority(current?.map((ticket) => (ticket.id === id ? { ...ticket, priority } : ticket)) ?? []));
+    if ((await call(`/dev-tickets/${id}`, { method: "PATCH", body: { priority } })) === null) reload();
   }
 
   async function create(values: TicketFormValues) {
@@ -186,17 +190,13 @@ function DevBoard({ call }: { call: Call }) {
             }
             return (
               <>
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-display text-label-lg text-ink">{ticket.title}</p>
-                  <Badge tone={ticket.priority === "high" ? "danger" : ticket.priority === "medium" ? "accent" : "neutral"}>
-                    {t(`priorities.${ticket.priority}`)}
-                  </Badge>
-                </div>
+                <p className="font-display text-label-lg text-ink">{ticket.title}</p>
                 {ticket.description && <ExpandableText text={ticket.description} />}
                 <p className="text-label-sm text-ink-soft">
                   {ticket.author ? `@${ticket.author.username}` : t("deletedAuthor")} ·{" "}
                   {format.dateTime(new Date(ticket.created_at), { dateStyle: "short" })}
                 </p>
+                <PriorityPicker value={ticket.priority} onChange={(priority) => void prioritize(ticket.id, priority)} name={`dev-${ticket.id}`} />
                 <div className="flex gap-1">
                   <Button size="sm" variant="secondary" onClick={() => setEditing(ticket.id)} className="gap-1">
                     <Icon name="edit" className="size-3.5" />
@@ -216,7 +216,7 @@ function DevBoard({ call }: { call: Call }) {
   );
 }
 
-type TicketFormValues = { title: string; description: string; priority: DevTicketPriority };
+type TicketFormValues = { title: string; description: string; priority: TicketPriority };
 
 function DevTicketForm({
   idPrefix,
@@ -235,6 +235,7 @@ function DevTicketForm({
 }) {
   const t = useTranslations("Admin.kanban");
   const [pending, setPending] = useState(false);
+  const [priority, setPriority] = useState<TicketPriority>(initial?.priority ?? "medium");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -244,10 +245,13 @@ function DevTicketForm({
     const ok = await onSubmit({
       title: String(values.get("title") ?? "").trim(),
       description: String(values.get("description") ?? "").trim(),
-      priority: String(values.get("priority")) as DevTicketPriority,
+      priority,
     });
     setPending(false);
-    if (ok && resetOnSuccess) form.reset();
+    if (ok && resetOnSuccess) {
+      form.reset();
+      setPriority("medium");
+    }
   }
 
   return (
@@ -266,17 +270,8 @@ function DevTicketForm({
           required
           className="flex-1"
         />
-        <label htmlFor={`${idPrefix}-priority`} className="sr-only">
-          {t("priorityLabel")}
-        </label>
-        <select id={`${idPrefix}-priority`} name="priority" defaultValue={initial?.priority ?? "medium"} className={`h-11 sm:w-40 ${FIELD_CLASS_NAME}`}>
-          {DEV_TICKET_PRIORITIES.map((priority) => (
-            <option key={priority} value={priority}>
-              {t(`priorities.${priority}`)}
-            </option>
-          ))}
-        </select>
       </div>
+      <PriorityPicker value={priority} onChange={setPriority} name={`${idPrefix}-priority`} />
       <label htmlFor={`${idPrefix}-description`} className="sr-only">
         {t("descriptionLabel")}
       </label>
@@ -353,6 +348,18 @@ function KanbanColumns({
               {cards.map(({ id }) => (
                 <li
                   key={id}
+                  // Clavier : la carte sélectionnée change de colonne avec ← et →.
+                  tabIndex={0}
+                  aria-label={t("cardLabel", { title: cardLabel(id), column: t(`columns.${column}`) })}
+                  aria-keyshortcuts="ArrowLeft ArrowRight"
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    const index = BOARD_COLUMNS.indexOf(column);
+                    const target = event.key === "ArrowLeft" ? BOARD_COLUMNS[index - 1] : event.key === "ArrowRight" ? BOARD_COLUMNS[index + 1] : undefined;
+                    if (!target) return;
+                    event.preventDefault();
+                    onMove(id, target);
+                  }}
                   draggable
                   onDragStart={(event) => {
                     event.dataTransfer.setData("text/plain", String(id));
@@ -363,32 +370,55 @@ function KanbanColumns({
                     setDragged(null);
                     setOver(null);
                   }}
-                  className={`cursor-grab active:cursor-grabbing ${dragged === id ? "opacity-50" : ""}`}
+                  className={`cursor-grab rounded-lg focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none active:cursor-grabbing ${dragged === id ? "opacity-50" : ""}`}
                 >
-                  <Card className="flex flex-col gap-2 p-3 shadow-xs">
-                    {renderCard(id)}
-                    <label className="sr-only" htmlFor={`kanban-move-${id}`}>
-                      {t("moveLabel", { title: cardLabel(id) })}
-                    </label>
-                    <select
-                      id={`kanban-move-${id}`}
-                      value={column}
-                      onChange={(event) => onMove(id, event.target.value as BoardColumn)}
-                      className={`h-8 text-label-md ${FIELD_CLASS_NAME}`}
-                    >
-                      {BOARD_COLUMNS.map((target) => (
-                        <option key={target} value={target}>
-                          {target === column ? t("currentColumn", { column: t(`columns.${target}`) }) : t("moveTo", { column: t(`columns.${target}`) })}
-                        </option>
-                      ))}
-                    </select>
-                  </Card>
+                  <Card className="flex flex-col gap-2 p-3 shadow-xs">{renderCard(id)}</Card>
                 </li>
               ))}
             </ul>
           </section>
         );
       })}
+    </div>
+  );
+}
+
+const PRIORITY_RANK: Record<TicketPriority, number> = { high: 0, medium: 1, low: 2 };
+
+// Même ordre que le serveur dans une colonne : priorité haute d'abord.
+function sortByPriority<T extends { priority: TicketPriority }>(tickets: T[]) {
+  return [...tickets].sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
+}
+
+const PRIORITY_TONES: Record<TicketPriority, string> = {
+  low: "border-line bg-surface-muted text-ink",
+  medium: "border-accent/40 bg-accent/10 text-accent",
+  high: "border-error/40 bg-error/10 text-error",
+};
+
+// Niveaux de priorité en un clic (boutons radio).
+function PriorityPicker({ value, onChange, name }: { value: TicketPriority; onChange: (priority: TicketPriority) => void; name: string }) {
+  const t = useTranslations("Admin.kanban");
+  return (
+    <div role="radiogroup" aria-label={t("priorityLabel")} className="flex gap-1">
+      {TICKET_PRIORITIES.map((priority) => (
+        <label
+          key={priority}
+          className={`flex-1 cursor-pointer rounded-full border px-2 py-0.5 text-center font-display text-label-sm transition has-focus-visible:ring-2 has-focus-visible:ring-accent/40 ${
+            value === priority ? PRIORITY_TONES[priority] : "border-transparent text-ink-soft hover:bg-surface-muted"
+          }`}
+        >
+          <input
+            type="radio"
+            name={name}
+            value={priority}
+            checked={value === priority}
+            onChange={() => onChange(priority)}
+            className="sr-only"
+          />
+          {t(`priorities.${priority}`)}
+        </label>
+      ))}
     </div>
   );
 }

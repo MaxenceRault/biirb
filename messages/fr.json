@@ -942,7 +942,8 @@
         "ticket_status": "État d'un ticket modifié",
         "dev_ticket_create": "Ticket de développement créé",
         "dev_ticket_update": "Ticket de développement modifié",
-        "dev_ticket_delete": "Ticket de développement supprimé"
+        "dev_ticket_delete": "Ticket de développement supprimé",
+        "ticket_priority": "Priorité d'un ticket modifiée"
       },
       "targets": {
         "user": "Utilisateur",
@@ -1033,7 +1034,7 @@
         "dev": "Développement"
       },
       "hints": {
-        "support": "Tickets envoyés par les utilisateurs. Déplacer un ticket change aussi l'état qu'ils voient sur leur page Support.",
+        "support": "Tickets envoyés par les utilisateurs. Déplacer un ticket change aussi l'état qu'ils voient sur leur page Support ; la priorité reste visible des admins seulement.",
         "dev": "Vos tickets internes pour améliorer Biirb : visibles des admins seulement."
       },
       "columns": {
@@ -1043,9 +1044,7 @@
         "closed": "Clôturé"
       },
       "emptyColumn": "Aucun ticket",
-      "moveLabel": "Déplacer « {title} »",
-      "moveTo": "Déplacer vers « {column} »",
-      "currentColumn": "Colonne : {column}",
+      "cardLabel": "{title}, colonne {column} : flèches gauche et droite pour la déplacer",
       "more": "Voir plus",
       "less": "Voir moins",
       "newTitle": "Nouveau ticket de développement",
