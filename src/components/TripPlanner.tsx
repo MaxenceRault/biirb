@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/Badge";
 import { ReasoningText } from "@/components/ui/ReasoningText";
@@ -89,6 +89,8 @@ export type TripItem = {
 export type TripTask = { id: number; label: string; detail: string | null; done: boolean };
 
 // Bouton d'une fonction du pass sur un voyage sans pass : grisé, mais cliquable (ouvre la fenêtre du pass).
+// Même seuil que le préfixe sm: de Tailwind (40rem).
+const SM_UP = "(min-width: 40rem)";
 const LOCKED_BUTTON = "text-ink-soft opacity-60 hover:opacity-90";
 
 export type TripDetail = {
@@ -892,6 +894,10 @@ function ItemRow({
 }) {
   const t = useTranslations("Planner");
   const [editing, setEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const card = useRef<HTMLLIElement>(null);
+  const menuId = useId();
+  useDismiss(card, menuOpen, () => setMenuOpen(false));
 
   if (editing) {
     return (
@@ -908,8 +914,26 @@ function ItemRow({
     );
   }
 
+  const actions = [
+    { icon: "sparkles" as const, label: t("item.menu.ask"), run: onAsk },
+    { icon: "edit" as const, label: t("item.menu.edit"), run: () => setEditing(true) },
+    { icon: "delete" as const, label: t("item.menu.delete"), run: () => void mutate(`/items/${item.id}`, "DELETE"), danger: true },
+  ];
+
+  // Mobile : toucher l'activité ouvre le menu (les boutons en ligne ne restent qu'à partir de sm). Un lien de la carte
+  // (récit source) garde son comportement.
+  function openFromCard(event: MouseEvent<HTMLLIElement>) {
+    if (!canEdit || window.matchMedia(SM_UP).matches) return;
+    if ((event.target as Element).closest("a, button")) return;
+    setMenuOpen((open) => !open);
+  }
+
   return (
-    <li className="flex gap-3 rounded-lg bg-surface-muted p-4 sm:gap-4">
+    <li
+      ref={card}
+      onClick={openFromCard}
+      className={`relative flex gap-3 rounded-lg bg-surface-muted p-4 sm:gap-4 ${canEdit ? "cursor-pointer active:bg-line/60 sm:cursor-auto sm:active:bg-surface-muted" : ""}`}
+    >
       <span className="w-11 shrink-0 font-display text-label-lg text-ink sm:w-12">{item.start_time}</span>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-2 font-display text-label-lg text-ink">
@@ -919,17 +943,56 @@ function ItemRow({
         {item.description && <p className="text-body-sm text-ink-soft">{item.description}</p>}
         <ItemOrigin item={item} />
       </div>
-      {/* Empilés sur mobile : plus de place pour le titre. */}
       {canEdit && (
-        <div className="-mt-1.5 -mr-1.5 flex shrink-0 flex-col items-start sm:mt-0 sm:mr-0 sm:flex-row sm:gap-1">
-          <IconButton icon="sparkles" label={t("copilot.askItem", { title: item.title })} onClick={onAsk} />
-          <IconButton icon="edit" label={t("item.edit", { title: item.title })} onClick={() => setEditing(true)} />
-          <IconButton
-            icon="delete"
-            label={t("item.delete", { title: item.title })}
-            onClick={() => void mutate(`/items/${item.id}`, "DELETE")}
-          />
-        </div>
+        <>
+          <div className="hidden shrink-0 flex-row gap-1 sm:flex">
+            <IconButton icon="sparkles" label={t("copilot.askItem", { title: item.title })} onClick={onAsk} />
+            <IconButton icon="edit" label={t("item.edit", { title: item.title })} onClick={() => setEditing(true)} />
+            <IconButton
+              icon="delete"
+              label={t("item.delete", { title: item.title })}
+              onClick={() => void mutate(`/items/${item.id}`, "DELETE")}
+            />
+          </div>
+          {/* Clavier et lecteur d'écran sur mobile : le même menu, sans toucher la carte. */}
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-controls={menuId}
+            onClick={() => setMenuOpen((open) => !open)}
+            className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:top-2 focus-visible:right-2 focus-visible:rounded-lg focus-visible:bg-surface focus-visible:px-2 focus-visible:py-1 focus-visible:text-label-sm sm:hidden"
+          >
+            {t("item.actions", { title: item.title })}
+          </button>
+          {menuOpen && (
+            <ul
+              id={menuId}
+              role="menu"
+              aria-label={t("item.actions", { title: item.title })}
+              className="absolute top-2 right-2 z-20 flex w-56 flex-col rounded-lg border border-line bg-surface p-1 shadow-sm sm:hidden"
+            >
+              {actions.map((action) => (
+                <li key={action.icon} role="none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      action.run();
+                    }}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left font-display text-label-lg transition hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none ${
+                      action.danger ? "text-error" : "text-ink"
+                    }`}
+                  >
+                    <Icon name={action.icon} className="size-4.5" />
+                    {action.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </li>
   );

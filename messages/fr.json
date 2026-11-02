@@ -494,7 +494,13 @@
       "descriptionPlaceholder": "Détails, adresse, conseils…",
       "category": "Catégorie",
       "save": "Enregistrer",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "actions": "Actions pour l'activité {title}",
+      "menu": {
+        "ask": "Demander à Biirbou",
+        "edit": "Modifier",
+        "delete": "Supprimer"
+      }
     },
     "categories": {
       "transport": "Transport",
