@@ -1,8 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Icon } from "@/components/ui/Icon";
+import { useDismiss } from "@/client/hooks/useDismiss";
 import type { TravelDuration, TravelLeg } from "@/client/hooks/useDayTravel";
 
 // Ligne entre deux activités du planning : à pied, et en voiture au-delà de 2 km (calculé par le serveur).
@@ -33,23 +34,44 @@ export function TravelLegRow({ leg, from, to }: { leg: TravelLeg; from: string; 
   );
 }
 
-// Mention exigée par OpenRouteService et OpenStreetMap, et limites de l'estimation.
+// Limites de l'estimation, et sources exigées par les licences d'OpenRouteService et d'OpenStreetMap derrière ⓘ.
 export function TravelCredit() {
   const t = useTranslations("Planner.travel");
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const sourcesId = useId();
+  useDismiss(root, open, () => setOpen(false));
   const link = (href: string) =>
     function Link(chunks: ReactNode) {
       return (
-        <a href={href} target="_blank" rel="noopener noreferrer" className="hover:text-ink hover:underline">
+        <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
           {chunks}
         </a>
       );
     };
+
   return (
-    <p className="text-label-sm text-ink-soft">
-      {t.rich("credit", {
-        ors: link("https://openrouteservice.org/"),
-        osm: link("https://www.openstreetmap.org/copyright"),
-      })}
-    </p>
+    <div ref={root} className="relative flex items-center gap-1 text-label-sm text-ink-soft">
+      <span>{t("estimate")}</span>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={sourcesId}
+        aria-label={t("sources")}
+        title={t("sources")}
+        onClick={() => setOpen((current) => !current)}
+        className="rounded-full p-0.5 transition hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:outline-none"
+      >
+        <Icon name="info" className="size-4" />
+      </button>
+      {open && (
+        <p id={sourcesId} className="absolute top-full left-0 z-10 mt-1 max-w-xs rounded-lg border border-line bg-surface px-3 py-2 text-ink shadow-lg">
+          {t.rich("credit", {
+            ors: link("https://openrouteservice.org/"),
+            osm: link("https://www.openstreetmap.org/copyright"),
+          })}
+        </p>
+      )}
+    </div>
   );
 }

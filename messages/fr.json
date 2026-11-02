@@ -476,7 +476,9 @@
       "drive": "En voiture :",
       "minutes": "{minutes} min",
       "hours": "{hours} h {minutes}",
-      "credit": "Trajets estimés à pied et en voiture, sans transports en commun ni trafic · <ors>© openrouteservice.org</ors> · <osm>© OpenStreetMap</osm>",
+      "estimate": "Trajets estimés, sans transports en commun ni trafic",
+      "sources": "Sources des temps de trajet",
+      "credit": "Calculés avec <ors>© openrouteservice.org</ors> (HeiGIT), à partir des données <osm>© les contributeurs d'OpenStreetMap</osm>.",
       "unavailable": "Temps de trajet indisponibles pour le moment.",
       "deferred": "Certains temps de trajet arriveront plus tard."
     },
