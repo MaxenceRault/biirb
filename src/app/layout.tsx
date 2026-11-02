@@ -1,6 +1,6 @@
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
-import { getAnalyticsConfig } from "@/server/config";
+import { getAnalyticsConfig, getSiteUrl } from "@/server/config";
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import Script from "next/script";
@@ -22,6 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("Metadata");
 
   return {
+    metadataBase: getSiteUrl(),
     title: { default: t("title"), template: `%s · ${t("title")}` },
     description: t("description"),
   };

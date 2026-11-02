@@ -46,11 +46,26 @@ export async function generateMetadata({ params }: PageProps<"/post/[slug]">): P
   const resolved = await resolvePost((await params).slug);
   if (!resolved || "redirectTo" in resolved) return {};
   const { post } = resolved;
+  const t = await getTranslations("Metadata");
+  const url = `/post/${post.slug}`;
+  const images = [{ url: post.photoUrl, alt: post.photoAlt }];
 
+  // openGraph remplace celui du layout et Next n'y recopie ni title ni description : tout est redonné ici.
   return {
     title: post.title,
     description: post.shortDescription,
-    openGraph: { images: [{ url: post.photoUrl, alt: post.photoAlt }] },
+    alternates: { canonical: url },
+    openGraph: {
+      type: "article",
+      url,
+      siteName: t("title"),
+      locale: "fr_FR",
+      title: post.title,
+      description: post.shortDescription,
+      publishedTime: new Date(post.createdAt).toISOString(),
+      images,
+    },
+    twitter: { card: "summary_large_image", title: post.title, description: post.shortDescription, images },
   };
 }
 
