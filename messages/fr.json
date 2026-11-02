@@ -470,6 +470,15 @@
       "maps": "Itinéraire du jour",
       "today": "Aujourd'hui"
     },
+    "travel": {
+      "label": "Trajet de « {from} » à « {to} »",
+      "walk": "À pied :",
+      "drive": "En voiture :",
+      "minutes": "{minutes} min",
+      "hours": "{hours} h {minutes}",
+      "credit": "Trajets estimés à pied et en voiture, sans transports en commun ni trafic · <ors>© openrouteservice.org</ors> · <osm>© OpenStreetMap</osm>",
+      "unavailable": "Temps de trajet indisponibles pour le moment."
+    },
     "item": {
       "edit": "Modifier l'activité {title}",
       "delete": "Supprimer l'activité {title}",
@@ -1602,7 +1611,7 @@
             "Compte : adresse email, mot de passe (stocké uniquement sous forme chiffrée irréversible), nom affiché, pseudo, photo ou avatar, ville facultative, préférences de confidentialité, date d'acceptation des CGU.",
             "Contenus : récits, photos, commentaires, mentions « j'aime » et enregistrements, signalements, tickets de support.",
             "Planificateur : voyages, activités, checklist, budget, dépenses partagées (y compris le nom des participants sans compte que vous ajoutez), messages échangés avec l'IA.",
-          "Position (facultative) : pendant un voyage, avec « Que faire maintenant ? », la position de votre appareil, seulement si vous cliquez sur « Utiliser ma position » et l'autorisez dans votre navigateur, arrondie à environ 1 km, ou le lieu que vous écrivez vous-même, ainsi que votre niveau d'énergie si vous l'indiquez. Ils servent uniquement à répondre à cette question : Brb ne les enregistre pas et ne les écrit pas dans ses journaux.",
+            "Position (facultative) : pendant un voyage, avec « Que faire maintenant ? », la position de votre appareil, seulement si vous cliquez sur « Utiliser ma position » et l'autorisez dans votre navigateur, arrondie à environ 1 km, ou le lieu que vous écrivez vous-même, ainsi que votre niveau d'énergie si vous l'indiquez. Ils servent uniquement à répondre à cette question : Brb ne les enregistre pas et ne les écrit pas dans ses journaux.",
             "Pass voyage : empreinte chiffrée et aperçu masqué de l'email de paiement, montant, date, consentements donnés. Aucune donnée bancaire.",
             "Technique : journaux du serveur (erreurs, adresse IP utilisée temporairement pour limiter les abus).",
             "Mesure d'audience : pages consultées (sans leurs paramètres ni leur fragment, qui peuvent contenir une recherche ou un code d'invitation), page de provenance, type d'appareil, navigateur, langue, pays et ville approximatifs (déduits de l'adresse IP, qui n'est pas conservée). Événements anonymes : inscription, lecture et publication d'un récit, création d'un voyage, utilisation de Biirbou, invitation d'un compagnon, commande et achat du pass, accompagnés seulement de catégories et de nombres (type de récit, pays de destination, durée du voyage, montant). Jamais d'email, de pseudo ni d'identifiant de compte, de récit ou de voyage."
@@ -1617,7 +1626,7 @@
         {
           "title": "Destinataires et sous-traitants",
           "paragraphs": [
-            "Google Cloud (hébergement, base de données, stockage des photos, journaux) et Google Vertex AI (modèle Gemini : génération des plannings, discussion, y compris la position arrondie ou le lieu que vous choisissez de partager avec « Que faire maintenant ? », vérification des photos), dans l'Union européenne. Buy Me a Coffee (dons et paiement du pass), qui traite vos données de paiement selon sa propre politique, avec des transferts possibles hors de l'Union européenne. Umami Cloud (Umami Software) pour la mesure d'audience, avec des transferts possibles hors de l'Union européenne. Les images d'illustration peuvent être chargées depuis Unsplash. Vos données ne sont jamais vendues."
+            "Google Cloud (hébergement, base de données, stockage des photos, journaux) et Google Vertex AI (modèle Gemini : génération des plannings, discussion, y compris la position arrondie ou le lieu que vous choisissez de partager avec « Que faire maintenant ? », vérification des photos), dans l'Union européenne. Buy Me a Coffee (dons et paiement du pass), qui traite vos données de paiement selon sa propre politique, avec des transferts possibles hors de l'Union européenne. Umami Cloud (Umami Software) pour la mesure d'audience, avec des transferts possibles hors de l'Union européenne. OpenRouteService (HeiGIT, Allemagne) pour les temps de trajet du pass voyage : il reçoit seulement le nom du lieu de chaque activité (ou les mots de son titre) et des coordonnées, jamais votre compte, votre email ni votre position. Les images d'illustration peuvent être chargées depuis Unsplash. Vos données ne sont jamais vendues."
           ]
         },
         {
@@ -1626,7 +1635,7 @@
             "Compte, récits, photos, commentaires et voyages : tant que le compte existe. Vous pouvez demander la suppression de votre compte via la page Support ; elle efface vos données, sauf celles qui doivent être gardées comme preuve (ci-dessous).",
             "Sessions de connexion : valables 30 jours au plus. Commande de pass en cours : 24 heures.",
             "Journaux techniques du serveur : 30 jours.",
-          "Position, lieu et niveau d'énergie de « Que faire maintenant ? » : aucune conservation, ils ne servent que le temps de la réponse.",
+            "Position, lieu et niveau d'énergie de « Que faire maintenant ? » : aucune conservation, ils ne servent que le temps de la réponse.",
             "Mesure d'audience : 6 mois, puis supprimée par Umami.",
             "Achats du pass et preuves des consentements (CGU, CGV, renonciation au droit de rétractation) : 5 ans après l'achat ou l'acceptation, pour faire valoir ou défendre un droit.",
             "Adresses IP utilisées contre les abus : en mémoire uniquement, le temps de la limitation (1 heure au plus)."

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/Badge";
 import { ReasoningText } from "@/components/ui/ReasoningText";
@@ -28,6 +28,8 @@ import { buildTripCsv, downloadFile } from "@/client/tripExport";
 import { TripPassCard, TripPassDialog, type TripPass, type TripPassFeature } from "@/components/TripPassCard";
 import { exportFileName } from "@/lib/fileName";
 import { TripTableView } from "@/components/TripTableView";
+import { TravelCredit, TravelLegRow } from "@/components/TripTravel";
+import { useDayTravel } from "@/client/hooks/useDayTravel";
 import {
   TRIP_PDF_TEMPLATES,
   TRIP_UNDO_HOURS,
@@ -79,6 +81,8 @@ export type TripItem = {
   color: TripItemColor | null;
   // Proposée par Biirbou (génération, proposition acceptée) ou saisie à la main.
   origin: "ai" | "manual";
+  // Nom du lieu donné par Biirbou (temps de trajet) ; null : pas de lieu précis.
+  place_name: string | null;
   source_post: { id: number; title: string; slug: string } | null;
 };
 
@@ -710,6 +714,11 @@ function DayPlanner({
   const dayNumber = days.indexOf(day) + 1;
   const dayItems = items.filter((item) => item.day === day);
   const mapsUrl = mapsUrls?.[day];
+  const online = useOnline();
+  // Ce qui change un trajet : ordre, horaire, titre, lieu ou catégorie d'une activité du jour.
+  const itemsKey = dayItems.map((item) => [item.id, item.start_time, item.title, item.place_name, item.category].join(":")).join("|");
+  const travel = useDayTravel(trip.id, day, itemsKey, passActive && online);
+  const legs = travel?.travel?.legs ?? [];
 
   async function regenerateDay() {
     if (!passActive) return onLocked("day");
@@ -822,22 +831,30 @@ function DayPlanner({
         {dayItems.length === 0 && <p className="text-body-sm text-ink-soft">{t("days.empty")}</p>}
 
         <ol className="flex flex-col gap-3">
-          {dayItems.map((item) => (
-            <ItemRow
-              key={item.id}
-              item={item}
-              days={days}
-              mutate={mutate}
-              canEdit={canEdit}
-              onAsk={() =>
-                onAsk({
-                  kind: "chat",
-                  draft: t("copilot.prefill.item", { title: item.title, number: days.indexOf(item.day) + 1, time: item.start_time }),
-                })
-              }
-            />
-          ))}
+          {dayItems.map((item, index) => {
+            const next = dayItems[index + 1];
+            const leg = next && legs.find((option) => option.fromItemId === item.id && option.toItemId === next.id);
+            return (
+              <Fragment key={item.id}>
+                <ItemRow
+                  item={item}
+                  days={days}
+                  mutate={mutate}
+                  canEdit={canEdit}
+                  onAsk={() =>
+                    onAsk({
+                      kind: "chat",
+                      draft: t("copilot.prefill.item", { title: item.title, number: days.indexOf(item.day) + 1, time: item.start_time }),
+                    })
+                  }
+                />
+                {leg && <TravelLegRow leg={leg} from={item.title} to={next.title} />}
+              </Fragment>
+            );
+          })}
         </ol>
+        {legs.length > 0 && <TravelCredit />}
+        {travel?.unavailable && <p className="text-label-sm text-ink-soft">{t("travel.unavailable")}</p>}
 
         {!canEdit ? null : adding ? (
           <ItemForm
