@@ -62,6 +62,8 @@ function allowOfflineCache(allowed: boolean) {
 
 // Session gardée (false) tant que le serveur n'a pas révoqué le refresh token : pas de fausse déconnexion hors ligne.
 export async function logout(): Promise<boolean> {
+  // Avant la révocation (le désabonnement a besoin du token) ; un échec n'empêche pas la déconnexion.
+  await import("@/client/push").then((push) => push.unsubscribeThisDevice()).catch(() => undefined);
   // Même verrou que le refresh (si le navigateur le gère) : un refresh en cours ne peut pas finir après la déconnexion.
   return navigator.locks
     ? navigator.locks.request("brb-refresh", revokeSession)
@@ -196,7 +198,10 @@ export function nextPathAfterLogin(fallback = "/") {
 export type ApiResult<T> = { data: T } | { error: string };
 
 // Access token refusé (401) : renouvelé une fois, puis l'appel est rejoué.
-export async function apiFetch<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<ApiResult<T>> {
+// ifMatch : version lue de la ressource (verrouillage optimiste) ; le serveur répond 412 CONFLICT si elle est périmée.
+type ApiInit = { method?: string; body?: unknown; ifMatch?: number };
+
+export async function apiFetch<T>(path: string, init: ApiInit = {}): Promise<ApiResult<T>> {
   const token = await getFreshToken();
   // Refresh impossible (hors ligne, serveur injoignable) : lecture sans token. Le serveur la refuse (401) ;
   // sans réseau, le service worker répond avec la dernière version en cache.
@@ -242,7 +247,7 @@ async function readResponse<T>(response: Response | null): Promise<ApiResult<T>>
   return { data: data as T };
 }
 
-function sendWithToken(path: string, init: { method?: string; body?: unknown }, token: string) {
+function sendWithToken(path: string, init: ApiInit, token: string) {
   const isMultipart = init.body instanceof FormData;
   return fetch(path, {
     method: init.method ?? "GET",
@@ -250,6 +255,7 @@ function sendWithToken(path: string, init: { method?: string; body?: unknown }, 
       Authorization: `Bearer ${token}`,
       // Multipart : le navigateur ajoute le Content-Type avec la frontière.
       ...(init.body === undefined || isMultipart ? {} : { "Content-Type": "application/json" }),
+      ...(init.ifMatch === undefined ? {} : { "If-Match": `"${init.ifMatch}"` }),
     },
     body: init.body === undefined ? undefined : isMultipart ? (init.body as FormData) : JSON.stringify(init.body),
   }).catch(() => null);

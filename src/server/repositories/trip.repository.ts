@@ -44,6 +44,8 @@ export type TripRow = Omit<TripSummary, "item_count" | "role" | "owner_name"> & 
   memory: string | null;
   // Villes où séjourne le voyageur (carte) : vide pour un voyage généré avant la carte.
   stops: TripStopRow[];
+  // Verrouillage optimiste du titre et du budget (If-Match).
+  version: number;
 };
 
 export type TripStopRow = { name: string; country_code: string; latitude: number; longitude: number; start_day: string; end_day: string };
@@ -62,6 +64,8 @@ export type TripItemRow = {
   // Nom du lieu donné par Biirbou (« Meiji Jingu »), cherché pour les temps de trajet ; null : pas de lieu précis.
   place_name: string | null;
   source_post: { id: number; title: string; slug: string } | null;
+  // Verrouillage optimiste (If-Match) : incrémentée à chaque modification.
+  version: number;
 };
 
 export type TripItemOrigin = "ai" | "manual";
@@ -177,7 +181,7 @@ const TRIP_SUMMARY_COLUMNS = `t.public_id as id, t.title, t.destination_country_
   (select count(*)::int from trip_destination d where d.trip_id = t.id) as destination_count`;
 
 // Postgres renvoie « HH:MM:SS ».
-const ITEM_COLUMNS_SELECT = `i.id, i.day, to_char(i.start_time, 'HH24:MI') as start_time, i.title, i.description, i.category, i.color, i.place_name, i.origin,
+const ITEM_COLUMNS_SELECT = `i.id, i.day, to_char(i.start_time, 'HH24:MI') as start_time, i.title, i.description, i.category, i.color, i.place_name, i.origin, i.version,
   case when p.id is null then null else json_build_object('id', p.id, 'title', p.title, 'slug', p.slug) end as source_post`;
 
 // Clé interne (suite du traitement) et identifiant public (renvoyé au client). Voyage et étapes dans une transaction.
@@ -253,7 +257,7 @@ export async function findTripById(id: number): Promise<TripRow | null> {
   const db = await getDb();
   const { rows } = await db.query<TripRow>(
     `select ${TRIP_SUMMARY_COLUMNS}, t.user_id, t.archetype_id, t.budget_lodging, t.budget_transit, t.budget_dining,
-       t.budget_activities, t.budget_target, t.source_post_count, t.generated_at, t.season_note, t.instructions, t.traveler_count, t.memory,
+       t.budget_activities, t.budget_target, t.source_post_count, t.generated_at, t.season_note, t.instructions, t.traveler_count, t.memory, t.version,
        coalesce(
          (select json_agg(json_build_object('name', s.name, 'country_code', s.country_code, 'latitude', s.latitude,
                    'longitude', s.longitude, 'start_day', s.start_day, 'end_day', s.end_day) order by s.position)
@@ -272,15 +276,26 @@ export async function findTripById(id: number): Promise<TripRow | null> {
   return rows[0] ?? null;
 }
 
-export async function updateTrip(id: number, changes: TripChanges) {
+// Résultat d'une écriture avec verrouillage optimiste : "conflict" = version attendue périmée, rien n'est modifié.
+export type VersionedWrite = "done" | "not_found" | "conflict";
+
+// expectedVersion absente : dernière écriture gagnante (aucun If-Match envoyé).
+export async function updateTrip(id: number, changes: TripChanges, expectedVersion?: number): Promise<VersionedWrite> {
   const entries = TRIP_COLUMNS.filter((column) => changes[column] !== undefined).map((column) => [column, changes[column]] as const);
-  if (entries.length === 0) return;
+  if (entries.length === 0) return "done";
+  // La mémoire, réécrite par Biirbou après chaque message, ne rend pas périmé un titre ou un budget en cours de saisie.
+  const bump = entries.some(([column]) => column !== "memory");
 
   const db = await getDb();
-  await db.query(
-    `update trip set ${entries.map(([column], index) => `${column} = $${index + 2}`).join(", ")} where id = $1`,
-    [id, ...entries.map(([, value]) => value)],
+  const versionParam = entries.length + 2;
+  const { rowCount } = await db.query(
+    `update trip set ${entries.map(([column], index) => `${column} = $${index + 2}`).join(", ")}${bump ? ", version = version + 1" : ""}
+     where id = $1 and ($${versionParam}::int is null or version = $${versionParam})`,
+    [id, ...entries.map(([, value]) => value), expectedVersion ?? null],
   );
+  if (rowCount === 1) return "done";
+  const { rowCount: exists } = await db.query("select 1 from trip where id = $1", [id]);
+  return exists === 1 ? "conflict" : "not_found";
 }
 
 export async function deleteTrip(id: number) {
@@ -365,7 +380,7 @@ export async function replaceTripPlan(tripId: number, plan: TripPlan, { record }
 
     await client.query(
       `update trip set budget_lodging = $2, budget_transit = $3, budget_dining = $4, budget_activities = $5,
-         source_post_count = $6, season_note = $7, generated_at = now()
+         source_post_count = $6, season_note = $7, generated_at = now(), version = version + 1
        where id = $1`,
       [tripId, plan.budget.lodging, plan.budget.transit, plan.budget.dining, plan.budget.activities, plan.source_post_count, plan.season_note],
     );
@@ -423,26 +438,49 @@ export async function insertTripItem(tripId: number, item: TripItemFields): Prom
   return rows[0].id;
 }
 
-export async function updateTripItem(tripId: number, itemId: number, changes: TripItemChanges): Promise<boolean> {
+export async function updateTripItem(
+  tripId: number,
+  itemId: number,
+  changes: TripItemChanges,
+  expectedVersion?: number,
+): Promise<VersionedWrite> {
   const entries = ITEM_COLUMNS.filter((column) => changes[column] !== undefined).map((column) => [column, changes[column]] as const);
-  if (entries.length === 0) return true;
+  if (entries.length === 0) return "done";
 
   // Titre changé : le lieu donné par Biirbou ne correspond plus (à droite du =, title est encore l'ancien titre).
   const titleParam = entries.findIndex(([column]) => column === "title");
   const placeReset = titleParam === -1 ? "" : `, place_name = case when title = $${titleParam + 3}::varchar then place_name end`;
   const db = await getDb();
+  const versionParam = entries.length + 3;
   const { rowCount } = await db.query(
-    `update trip_item set ${entries.map(([column], index) => `${column} = $${index + 3}`).join(", ")}${placeReset}
-     where id = $1 and trip_id = $2`,
-    [itemId, tripId, ...entries.map(([, value]) => value)],
+    `update trip_item set ${entries.map(([column], index) => `${column} = $${index + 3}`).join(", ")}${placeReset}, version = version + 1
+     where id = $1 and trip_id = $2 and ($${versionParam}::int is null or version = $${versionParam})`,
+    [itemId, tripId, ...entries.map(([, value]) => value), expectedVersion ?? null],
   );
-  return rowCount === 1;
+  return rowCount === 1 ? "done" : itemWriteFailure(tripId, itemId);
 }
 
-export async function deleteTripItem(tripId: number, itemId: number): Promise<boolean> {
+export async function deleteTripItem(tripId: number, itemId: number, expectedVersion?: number): Promise<VersionedWrite> {
   const db = await getDb();
-  const { rowCount } = await db.query("delete from trip_item where id = $1 and trip_id = $2", [itemId, tripId]);
-  return rowCount === 1;
+  const { rowCount } = await db.query(
+    "delete from trip_item where id = $1 and trip_id = $2 and ($3::int is null or version = $3)",
+    [itemId, tripId, expectedVersion ?? null],
+  );
+  return rowCount === 1 ? "done" : itemWriteFailure(tripId, itemId);
+}
+
+// Aucune ligne touchée : activité disparue, ou modifiée par un autre membre depuis la version attendue.
+async function itemWriteFailure(tripId: number, itemId: number): Promise<VersionedWrite> {
+  const db = await getDb();
+  const { rowCount } = await db.query("select 1 from trip_item where id = $1 and trip_id = $2", [itemId, tripId]);
+  return rowCount === 1 ? "conflict" : "not_found";
+}
+
+// Titre d'une activité (texte des notifications), lu avant sa suppression.
+export async function findTripItemTitle(tripId: number, itemId: number): Promise<string | null> {
+  const db = await getDb();
+  const { rows } = await db.query<{ title: string }>("select title from trip_item where id = $1 and trip_id = $2", [itemId, tripId]);
+  return rows[0]?.title ?? null;
 }
 
 export async function insertTripTask(tripId: number, label: string): Promise<number> {
@@ -652,7 +690,7 @@ async function applySuggestion(
   const { rowCount } = await client.query(
     `update trip_item i
      set day = s.day, start_time = s.start_time, title = s.title, description = s.description, category = s.category,
-       source_post_id = s.source_post_id, place_name = s.place_name, origin = 'ai'
+       source_post_id = s.source_post_id, place_name = s.place_name, origin = 'ai', version = i.version + 1
      from trip_suggestion s
      where s.id = $1 and i.id = $2 and i.trip_id = $3`,
     [suggestionId, targetId, tripId],
@@ -792,7 +830,7 @@ export async function undoLastPlanChange(tripId: number): Promise<"undone" | "no
       await client.query(
         `update trip t set budget_lodging = x.budget_lodging, budget_transit = x.budget_transit, budget_dining = x.budget_dining,
            budget_activities = x.budget_activities, source_post_count = x.source_post_count, season_note = x.season_note,
-           generated_at = x.generated_at
+           generated_at = x.generated_at, version = t.version + 1
          from trip_plan_change c,
            jsonb_to_record(c.snapshot -> 'trip')
              as x (budget_lodging int, budget_transit int, budget_dining int, budget_activities int, source_post_count int,

@@ -10,6 +10,7 @@ import { findPostsForTrip, type PostForTrip } from "@/server/repositories/post.r
 import { AiQuotaError, consumeAiCall, getAiQuota } from "@/server/services/ai-quota.service";
 import { findSelectableArchetype } from "@/server/services/archetype.service";
 import { requireTripRole } from "@/server/services/trip-access.service";
+import { notifyTripMembers } from "@/server/services/notification.service";
 import { getTripPassStatus, requireTripPass } from "@/server/services/trip-pass.service";
 import { findSpendingByCategory } from "@/server/repositories/trip-expense.repository";
 import { getEuroRates } from "@/server/infra/exchangeRates";
@@ -28,6 +29,7 @@ import {
   findTripById,
   findTripInternalId,
   findTripItems,
+  findTripItemTitle,
   findTripMessages,
   findTripsByUser,
   findTripTasks,
@@ -88,6 +90,8 @@ export class TripError extends Error {
       // « Annuler » : aucun changement de Biirbou dans le délai, ou planning modifié à la main depuis.
       | "NOTHING_TO_UNDO"
       | "PLAN_CHANGED"
+      // Verrouillage optimiste (If-Match) : modifié par un autre membre depuis la version lue.
+      | "CONFLICT"
       // Quota IA (ai-quota.service).
       | "FORBIDDEN"
       | "AI_DISABLED"
@@ -413,6 +417,7 @@ export async function regenerateTrip(userId: string, tripId: number) {
   const generated = await generatePlan({ ...tripContext(trip), posts: await postsForTrip(trip) });
   await replaceTripPlan(tripId, generated.plan, { record: true });
   await trackServerEvent("ai_generation_completed", { kind: "regenerate" });
+  await notifyTripMembers(tripId, userId, "plan_regenerated");
 }
 
 // Annule le dernier changement de Biirbou (proposition acceptée, re-génération) : le plus récent d'abord, pendant TRIP_UNDO_HOURS.
@@ -421,6 +426,7 @@ export async function undoPlanChange(userId: string, tripId: number) {
   const result = await undoLastPlanChange(tripId);
   if (result === "none") throw new TripError("NOTHING_TO_UNDO");
   if (result === "changed") throw new TripError("PLAN_CHANGED");
+  await notifyTripMembers(tripId, userId, "plan_undone");
   return getTrip(userId, tripId);
 }
 
@@ -435,6 +441,7 @@ export async function regenerateTripDay(userId: string, tripId: number, day: str
   const dayItems = await generateDay({ ...tripContext(trip), posts, day, otherItems: items.filter((item) => item.day !== day) });
   await replaceTripDayItems(tripId, day, dayItems);
   await trackServerEvent("ai_generation_completed", { kind: "day" });
+  await notifyTripMembers(tripId, userId, "day_regenerated", day);
   return getTrip(userId, tripId);
 }
 
@@ -461,11 +468,12 @@ export async function exportTripCalendar(userId: string, tripId: number) {
   return { fileName: `${exportFileName(trip.title)}.ics`, content };
 }
 
-export async function updateTrip(userId: string, tripId: number, input: UpdateTripInput) {
+// expectedVersion : version lue par le client (If-Match) ; absente, la dernière écriture gagne.
+export async function updateTrip(userId: string, tripId: number, input: UpdateTripInput, expectedVersion?: number) {
   await findTripFor(userId, tripId, "editor");
   // La mémoire est relue par Biirbou à chaque message : même filtre que la discussion.
   if (input.memory && isPromptAttack(input.memory)) throw new TripError("INSTRUCTIONS_REJECTED");
-  await updateTripRow(tripId, {
+  const result = await updateTripRow(tripId, {
     title: input.title,
     memory: input.memory,
     budget_target: input.budgetTarget,
@@ -473,7 +481,11 @@ export async function updateTrip(userId: string, tripId: number, input: UpdateTr
     budget_transit: input.budgetTransit,
     budget_dining: input.budgetDining,
     budget_activities: input.budgetActivities,
-  });
+  }, expectedVersion);
+  if (result === "not_found") throw new TripError("NOT_FOUND");
+  if (result === "conflict") throw new TripError("CONFLICT");
+  // Titre ou budget : la mémoire seule n'est pas un changement du programme.
+  if (Object.keys(input).some((key) => key !== "memory")) await notifyTripMembers(tripId, userId, "trip_updated", input.title ?? null);
   return getTrip(userId, tripId);
 }
 
@@ -487,28 +499,37 @@ export async function addTripItem(userId: string, tripId: number, input: CreateT
   if (!isDuringTrip(trip.start_date, trip.end_date, input.day)) throw new TripError("INVALID_INPUT");
 
   await insertTripItem(tripId, { ...input, start_time: input.startTime });
+  await notifyTripMembers(tripId, userId, "item_added", input.title);
   return getTrip(userId, tripId);
 }
 
-export async function updateTripItem(userId: string, tripId: number, itemId: number, input: UpdateTripItemInput) {
+export async function updateTripItem(userId: string, tripId: number, itemId: number, input: UpdateTripItemInput, expectedVersion?: number) {
   const { trip } = await findTripFor(userId, tripId, "editor");
   if (input.day && !isDuringTrip(trip.start_date, trip.end_date, input.day)) throw new TripError("INVALID_INPUT");
 
   const { startTime, ...fields } = input;
   // Contenu changé à la main (pas seulement la couleur) : l'activité n'est plus celle proposée par Biirbou.
   const edited = Object.keys(input).some((key) => key !== "color");
-  const updated = await updateTripItemRow(tripId, itemId, {
-    ...fields,
-    ...(startTime ? { start_time: startTime } : {}),
-    ...(edited ? { origin: "manual" as const } : {}),
-  });
-  if (!updated) throw new TripError("NOT_FOUND");
+  const result = await updateTripItemRow(
+    tripId,
+    itemId,
+    { ...fields, ...(startTime ? { start_time: startTime } : {}), ...(edited ? { origin: "manual" as const } : {}) },
+    expectedVersion,
+  );
+  if (result === "not_found") throw new TripError("NOT_FOUND");
+  if (result === "conflict") throw new TripError("CONFLICT");
+  // Couleur seule : simple repère visuel, pas un changement du programme.
+  if (edited) await notifyTripMembers(tripId, userId, "item_updated", input.title ?? (await findTripItemTitle(tripId, itemId)));
   return getTrip(userId, tripId);
 }
 
-export async function deleteTripItem(userId: string, tripId: number, itemId: number) {
+export async function deleteTripItem(userId: string, tripId: number, itemId: number, expectedVersion?: number) {
   await findTripFor(userId, tripId, "editor");
-  if (!(await deleteTripItemRow(tripId, itemId))) throw new TripError("NOT_FOUND");
+  const title = await findTripItemTitle(tripId, itemId);
+  const result = await deleteTripItemRow(tripId, itemId, expectedVersion);
+  if (result === "not_found") throw new TripError("NOT_FOUND");
+  if (result === "conflict") throw new TripError("CONFLICT");
+  await notifyTripMembers(tripId, userId, "item_deleted", title);
   return getTrip(userId, tripId);
 }
 
@@ -583,6 +604,7 @@ export async function answerTripSuggestion(userId: string, tripId: number, sugge
   const answered = await answerTripSuggestionRow(tripId, suggestionId, accepted);
   if (!answered) throw new TripError("NOT_FOUND");
   if (answered === "outdated") throw new TripError("SUGGESTION_OUTDATED");
+  if (accepted) await notifyTripMembers(tripId, userId, "suggestion_accepted");
   return getTrip(userId, tripId);
 }
 

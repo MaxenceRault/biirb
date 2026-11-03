@@ -20,8 +20,11 @@ import { countryName, flagEmoji } from "@/lib/country";
 import type { Archetype } from "@/lib/posts";
 import { apiDownload, apiFetch, getSessionSnapshot } from "@/client/session";
 import { CopilotCard, CopilotLauncher, TripCopilot, type CopilotAsk, type CopilotRequest } from "@/components/TripCopilot";
+import { TripConflictDialog, type TripConflict } from "@/components/TripConflictDialog";
 import { TripExpenses } from "@/components/TripExpenses";
+import { TripNotificationSettings } from "@/components/TripNotificationSettings";
 import { useOnline } from "@/client/hooks/useOnline";
+import { useLiveRefresh } from "@/client/hooks/useLiveRefresh";
 import { TripMap, type TripMapData } from "@/components/TripMap";
 import { TripSharePanel, type TripRole } from "@/components/TripSharePanel";
 import { buildTripCsv, downloadFile } from "@/client/tripExport";
@@ -68,6 +71,8 @@ export type Trip = {
   traveler_count: number;
   // Ce que Biirbou a retenu de la discussion (contraintes durables) : null si rien.
   memory: string | null;
+  // Version du titre et du budget, renvoyée dans If-Match (conflit entre membres → 412).
+  version: number;
 };
 
 export type TripItem = {
@@ -84,6 +89,8 @@ export type TripItem = {
   // Nom du lieu donné par Biirbou (temps de trajet) ; null : pas de lieu précis.
   place_name: string | null;
   source_post: { id: number; title: string; slug: string } | null;
+  // Renvoyée dans If-Match : modifiée entre-temps par un autre membre → 412, écran de choix.
+  version: number;
 };
 
 export type TripTask = { id: number; label: string; detail: string | null; done: boolean };
@@ -166,7 +173,8 @@ export function budgetTotal(trip: Trip) {
   return trip.budget_lodging + trip.budget_transit + trip.budget_dining + trip.budget_activities;
 }
 
-type Mutate = (path: string, method: string, body?: unknown) => Promise<boolean>;
+// version : celle lue au début de la modification (If-Match) ; absente, la dernière écriture gagne.
+type Mutate = (path: string, method: string, body?: unknown, version?: number) => Promise<boolean>;
 
 type LoadState = { status: "loading" } | { status: "error"; error: PlannerError } | { status: "ready"; data: TripDetail };
 
@@ -178,16 +186,20 @@ export function TripPlanner({ tripId }: { tripId: string }) {
   const [error, setError] = useState<PlannerError | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [undoing, setUndoing] = useState(false);
-  // Incrémenté après une annulation : la discussion relit ses propositions (une proposition annulée redevient en attente).
+  // Incrémenté après une annulation et à chaque synchronisation : la discussion relit ses messages et propositions.
   const [chatVersion, setChatVersion] = useState(0);
   // Biirbou du bouton flottant : réfléchit pendant une re-génération (voyage ou jour), content quand elle aboutit.
   const [dayBusy, setDayBusy] = useState(false);
   const [cheer, setCheer] = useState(false);
+  // Compteur d'écritures : une relecture lancée avant ou pendant une modification ne doit pas écraser son résultat.
+  const writes = useRef(0);
   const [sharing, setSharing] = useState(false);
   const [view, setView] = useState<"plan" | "table" | "expenses">("plan");
   const [passFeature, setPassFeature] = useState<TripPassFeature | null>(null);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotRequest, setCopilotRequest] = useState<CopilotRequest | null>(null);
+  const [conflict, setConflict] = useState<TripConflict | null>(null);
+  const conflictAnswer = useRef<((keepMine: boolean) => void) | null>(null);
   const online = useOnline();
   const basePath = `/api/v1/trips/${tripId}`;
 
@@ -233,13 +245,28 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     return (await reloadTrip())?.pass.active ?? false;
   }
 
-  const mutate: Mutate = async (path, method, body) => {
+  // Voyage partagé : les changements des autres membres apparaissent sans recharger la page. Échec silencieux.
+  async function syncTrip() {
+    if (state.status !== "ready") return;
+    const before = writes.current;
+    const result = await apiFetch<TripDetail>(basePath);
+    if (!("data" in result) || writes.current !== before) return;
+    setState({ status: "ready", data: result.data });
+    setChatVersion((version) => version + 1);
+  }
+
+  useLiveRefresh(() => void syncTrip(), online);
+
+  const mutate: Mutate = async (path, method, body, version) => {
     setError(null);
-    const result = await apiFetch<TripDetail>(`${basePath}${path}`, { method, body });
+    writes.current += 1;
+    const result = await apiFetch<TripDetail>(`${basePath}${path}`, { method, body, ifMatch: version });
+    writes.current += 1;
     if ("data" in result) {
       setState({ status: "ready", data: result.data });
       return true;
     }
+    if (result.error === "CONFLICT") return resolveConflict(path, method, body);
     if (result.error === "UNAUTHORIZED") router.replace("/login");
     // Limite atteinte sur un voyage sans pass : on propose le pass plutôt qu'un simple message d'erreur.
     const upsell = upsellFor(result.error);
@@ -247,6 +274,37 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     else setError(plannerError(result.error));
     return false;
   };
+
+  // 412 : un autre membre a modifié la même chose entre-temps. On relit sa version, l'utilisateur choisit ;
+  // « ma version » renvoie la modification sur la version relue (nouveau conflit possible si elle change encore).
+  // true : formulaire fermé (version enregistrée gardée, ou la sienne appliquée).
+  async function resolveConflict(path: string, method: string, body: unknown): Promise<boolean> {
+    const current = await reloadTrip();
+    if (!current) {
+      setError("INTERNAL_ERROR");
+      return false;
+    }
+    const itemId = /^\/items\/(\d+)$/.exec(path)?.[1];
+    const item = itemId ? current.items.find((candidate) => candidate.id === Number(itemId)) : undefined;
+    // Supprimée entre-temps : plus rien à choisir, le planning relu l'affiche déjà.
+    if (itemId && !item) return true;
+
+    const mine = (body ?? {}) as Record<string, unknown>;
+    const keepMine = await new Promise<boolean>((resolve) => {
+      conflictAnswer.current = resolve;
+      setConflict(
+        item ? (method === "DELETE" ? { kind: "delete", theirs: item } : { kind: "item", theirs: item, mine }) : { kind: "trip", theirs: current.trip, mine },
+      );
+    });
+    if (!keepMine) return true;
+    return mutate(path, method, body, item ? item.version : current.trip.version);
+  }
+
+  function answerConflict(keepMine: boolean) {
+    conflictAnswer.current?.(keepMine);
+    conflictAnswer.current = null;
+    setConflict(null);
+  }
 
   function upsellFor(code: string): TripPassFeature | null {
     if (state.status !== "ready" || state.data.pass.active) return null;
@@ -383,7 +441,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
           trip={trip}
           items={items}
           canEdit={canEdit}
-          onColor={(item, color) => mutate(`/items/${item.id}`, "PATCH", { color })}
+          onColor={(item, color) => mutate(`/items/${item.id}`, "PATCH", { color }, item.version)}
         />
       ) : (
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
@@ -444,6 +502,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
       {!pass.active && (
         <TripPassDialog feature={passFeature} onClose={() => setPassFeature(null)} tripId={tripId} pass={pass} role={role} onRefresh={reloadPass} />
       )}
+      <TripConflictDialog conflict={conflict} days={tripDays(trip.start_date, trip.end_date)} onAnswer={answerConflict} />
     </div>
   );
 }
@@ -478,7 +537,9 @@ function TripHeader({
   const t = useTranslations("Planner");
   const format = useFormatter();
   const now = useNow({ updateInterval: 60_000 });
-  const [editing, setEditing] = useState(false);
+  // Version du titre au début de l'édition (If-Match) : la synchronisation ne doit pas masquer un conflit. null : pas d'édition.
+  const [editingVersion, setEditingVersion] = useState<number | null>(null);
+  const editing = editingVersion !== null;
   const [copied, setCopied] = useState(false);
 
   // ID à donner au support ou à un admin (pass voyage, problème de paiement…).
@@ -524,7 +585,7 @@ function TripHeader({
   async function handleRename(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const title = String(new FormData(event.currentTarget).get("title") ?? "");
-    if (await mutate("", "PATCH", { title })) setEditing(false);
+    if (await mutate("", "PATCH", { title }, editingVersion ?? undefined)) setEditingVersion(null);
   }
 
   return (
@@ -549,7 +610,7 @@ function TripHeader({
               <Button type="submit" size="sm">
                 {t("trip.save")}
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => setEditing(false)}>
+              <Button size="sm" variant="secondary" onClick={() => setEditingVersion(null)}>
                 {t("trip.cancel")}
               </Button>
             </form>
@@ -559,7 +620,7 @@ function TripHeader({
               {role !== "viewer" && (
                 <button
                   type="button"
-                  onClick={() => setEditing(true)}
+                  onClick={() => setEditingVersion(trip.version)}
                   aria-label={t("trip.editTitle")}
                   className="rounded-lg p-1 text-ink-soft transition hover:bg-surface-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:outline-none"
                 >
@@ -571,6 +632,7 @@ function TripHeader({
         </div>
 
         <div className="flex shrink-0 flex-wrap gap-2">
+          <TripNotificationSettings tripId={trip.id} />
           <Button variant="secondary" size="sm" onClick={onToggleSharing} aria-expanded={sharing} className="gap-1.5">
             <Icon name="share" className="size-4" />
             {t("share.open")}
@@ -937,22 +999,23 @@ function ItemRow({
   onAsk: () => void;
 }) {
   const t = useTranslations("Planner");
-  const [editing, setEditing] = useState(false);
+  // Version au début de l'édition (If-Match), comme pour le titre du voyage. null : pas d'édition.
+  const [editingVersion, setEditingVersion] = useState<number | null>(null);
   const confirm = useConfirm();
   const [menuOpen, setMenuOpen] = useState(false);
   const card = useRef<HTMLLIElement>(null);
   const menuId = useId();
   useDismiss(card, menuOpen, () => setMenuOpen(false));
 
-  if (editing) {
+  if (editingVersion !== null) {
     return (
       <li>
         <ItemForm
           days={days}
           initial={item}
-          onCancel={() => setEditing(false)}
+          onCancel={() => setEditingVersion(null)}
           onSubmit={async (body) => {
-            if (await mutate(`/items/${item.id}`, "PATCH", body)) setEditing(false);
+            if (await mutate(`/items/${item.id}`, "PATCH", body, editingVersion)) setEditingVersion(null);
           }}
         />
       </li>
@@ -961,7 +1024,7 @@ function ItemRow({
 
   const actions = [
     { icon: "sparkles" as const, label: t("item.menu.ask"), run: onAsk },
-    { icon: "edit" as const, label: t("item.menu.edit"), run: () => setEditing(true) },
+    { icon: "edit" as const, label: t("item.menu.edit"), run: () => setEditingVersion(item.version) },
     { icon: "delete" as const, label: t("item.menu.delete"), run: () => void remove(), danger: true },
   ];
 
@@ -974,7 +1037,8 @@ function ItemRow({
       icon: "delete",
       danger: true,
     });
-    if (confirmed) await mutate(`/items/${item.id}`, "DELETE");
+    // Version affichée au moment de confirmer : un changement d'un autre membre entre-temps ouvre l'écran de choix.
+    if (confirmed) await mutate(`/items/${item.id}`, "DELETE", undefined, item.version);
   }
 
   // Mobile : toucher l'activité ouvre le menu (les boutons en ligne ne restent qu'à partir de sm). Un lien de la carte
@@ -1010,7 +1074,7 @@ function ItemRow({
         <>
           <div className="hidden shrink-0 flex-row gap-1 sm:flex">
             <IconButton icon="sparkles" label={t("copilot.askItem", { title: item.title })} onClick={onAsk} />
-            <IconButton icon="edit" label={t("item.edit", { title: item.title })} onClick={() => setEditing(true)} />
+            <IconButton icon="edit" label={t("item.edit", { title: item.title })} onClick={() => setEditingVersion(item.version)} />
             <IconButton
               icon="delete"
               label={t("item.delete", { title: item.title })}
@@ -1240,6 +1304,10 @@ function BudgetCard({ trip, mutate, canEdit, onAsk }: { trip: Trip; mutate: Muta
   const total = budgetTotal(trip);
   const target = trip.budget_target;
   const progress = target ? Math.min(100, Math.round((total / target) * 100)) : 100;
+  const liveKey = `${trip.generated_at}-${total}-${target}`;
+  // Saisie en cours : version lue au premier changement (If-Match) et formulaire figé, pour que la synchronisation
+  // n'efface pas ce que l'utilisateur tape (un changement d'un autre membre passe par l'écran de choix).
+  const [draft, setDraft] = useState<{ version: number; key: string } | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1248,10 +1316,16 @@ function BudgetCard({ trip, mutate, canEdit, onAsk }: { trip: Trip; mutate: Muta
     const targetValue = String(form.get("budgetTarget") ?? "").trim();
 
     setSaved(false);
-    const ok = await mutate("", "PATCH", {
-      ...Object.fromEntries(BUDGET_FIELDS.map(({ body }) => [body, amount(body)])),
-      budgetTarget: targetValue === "" ? null : amount("budgetTarget"),
-    });
+    const ok = await mutate(
+      "",
+      "PATCH",
+      {
+        ...Object.fromEntries(BUDGET_FIELDS.map(({ body }) => [body, amount(body)])),
+        budgetTarget: targetValue === "" ? null : amount("budgetTarget"),
+      },
+      draft?.version ?? trip.version,
+    );
+    if (ok) setDraft(null);
     setSaved(ok);
   }
 
@@ -1270,11 +1344,14 @@ function BudgetCard({ trip, mutate, canEdit, onAsk }: { trip: Trip; mutate: Muta
         />
       </div>
 
-      {/* key : repart des valeurs à jour après une régénération. */}
+      {/* key : repart des valeurs à jour (régénération, autre membre), sauf pendant une saisie. */}
       <form
-        key={`${trip.generated_at}-${total}-${target}`}
+        key={draft?.key ?? liveKey}
         onSubmit={handleSubmit}
-        onChange={() => setSaved(false)}
+        onChange={() => {
+          setSaved(false);
+          if (!draft) setDraft({ version: trip.version, key: liveKey });
+        }}
         className="flex flex-col gap-3"
       >
         <fieldset disabled={!canEdit} className="contents">
