@@ -58,10 +58,11 @@ export type CopilotAsk = { kind: "chat"; draft?: string } | { kind: "adapt"; day
 export type CopilotRequest = CopilotAsk & { nonce: number };
 
 const CHEER_MS = 1_500;
-// Clic sur le bouton flottant : écrasement, puis vol de la mascotte vers le panneau (Motion, même layoutId).
+// Clic sur le bouton flottant : écrasement, puis le bouton grandit et devient le panneau (Motion, même layoutId) ;
+// à la fermeture, le panneau se referme dans le bouton.
 const PRESS_MS = 140;
-const MASCOT_LAYOUT_ID = "biirbou-mascot";
-const FLIGHT = { type: "spring", stiffness: 260, damping: 26 } as const;
+const SHELL_LAYOUT_ID = "biirbou-copilot";
+const MORPH = { type: "spring", stiffness: 300, damping: 32 } as const;
 
 // Motifs d'imprévus proposés par « Adapter mon voyage » (textes dans messages/fr.json → Planner.copilot.adapt).
 const ADAPT_REASONS = ["rain", "tired", "late", "closed", "budget", "other"] as const;
@@ -124,7 +125,7 @@ export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: (
   // Appui maintenu : il gonfle ; relâché sur le bouton, le clic l'ouvre (écrasement puis vol).
   const [holding, setHolding] = useState(false);
 
-  // Il s'écrase un instant, puis s'envole vers l'en-tête du panneau (même layoutId) ; sans animation : tout de suite.
+  // Il s'écrase un instant, puis le bouton s'ouvre en panneau ; sans animation : tout de suite.
   function open() {
     if (reduce) return onOpen();
     setPressed(true);
@@ -132,7 +133,11 @@ export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: (
   }
 
   return (
-    <button
+    <motion.button
+      layoutId={reduce ? undefined : SHELL_LAYOUT_ID}
+      transition={MORPH}
+      // Rayon en style (et non en classe) : Motion le garde rond pendant la transformation en panneau.
+      style={{ borderRadius: 9999 }}
       type="button"
       onClick={open}
       onPointerEnter={() => setHovered(true)}
@@ -147,9 +152,9 @@ export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: (
       onContextMenu={(event) => event.preventDefault()}
       onFocus={() => setHovered(true)}
       onBlur={() => setHovered(false)}
-      className="group fixed right-4 bottom-4 z-40 flex touch-manipulation items-center rounded-full select-none [-webkit-touch-callout:none] border border-transparent p-1.5 font-display text-label-lg text-ink transition-all duration-300 ease-out hover:border-line hover:bg-surface hover:shadow-lg focus-visible:border-line focus-visible:bg-surface focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none motion-reduce:transition-none md:right-6 md:bottom-6"
+      className="group fixed right-4 bottom-4 z-40 flex touch-manipulation items-center select-none [-webkit-touch-callout:none] border border-transparent p-1.5 font-display text-label-lg text-ink transition-[background-color,border-color,box-shadow] duration-300 ease-out hover:border-line hover:bg-surface hover:shadow-lg focus-visible:border-line focus-visible:bg-surface focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none motion-reduce:transition-none md:right-6 md:bottom-6"
     >
-      <motion.span layoutId={reduce ? undefined : MASCOT_LAYOUT_ID} transition={FLIGHT} className="flex">
+      <span className="flex">
         <Biirbou
           mood={mood}
           oops={oops}
@@ -159,15 +164,15 @@ export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: (
           followPointer
           className="size-16 drop-shadow-md transition-[filter] duration-300 group-hover:drop-shadow-none group-focus-visible:drop-shadow-none"
         />
-      </motion.span>
+      </span>
       <span className="max-w-0 -translate-x-2 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:mr-3 group-hover:ml-2 group-hover:max-w-xs group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:mr-3 group-focus-visible:ml-2 group-focus-visible:max-w-xs group-focus-visible:translate-x-0 group-focus-visible:opacity-100 motion-reduce:transition-none">
         {t("copilot.launcher")}
       </span>
-    </button>
+    </motion.button>
   );
 }
 
-// Panneau du copilote, non modal (le planning reste visible et utilisable à côté). Toujours monté : la discussion et le
+// Panneau du copilote, non modal (le planning reste visible et utilisable à côté). Composant toujours monté : la discussion et le
 // brouillon survivent à sa fermeture. Une proposition n'est ajoutée au planning que si l'utilisateur répond oui.
 export function TripCopilot({
   open,
@@ -339,26 +344,41 @@ export function TripCopilot({
     );
   }
 
+  // Fermé : rien n'est affiché, mais l'état (discussion, brouillon) reste dans ce composant toujours monté.
+  if (!open) return null;
   return (
-    <aside
+    <motion.aside
+      layoutId={reduce ? undefined : SHELL_LAYOUT_ID}
+      transition={MORPH}
+      style={{ borderRadius: 0 }}
       ref={panel}
       tabIndex={-1}
       aria-label={t("copilot.panelLabel")}
       onKeyDown={(event) => {
         if (event.key === "Escape") onClose();
       }}
-      className={`fixed inset-y-0 right-0 z-50 w-full flex-col border-l ${open ? "flex" : "hidden"} border-line bg-surface shadow-lg focus-visible:outline-none sm:w-[26rem]`}
+      className="fixed inset-y-0 right-0 z-50 flex w-full flex-col overflow-hidden border-l border-line bg-surface shadow-lg focus-visible:outline-none sm:w-[26rem]"
     >
+      {/* Le contenu apparaît une fois le panneau presque ouvert : pas de texte déformé pendant la transformation. */}
+      <motion.div
+        className="flex min-h-0 flex-1 flex-col"
+        initial={reduce ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.12, duration: 0.2 }}
+      >
       <div className="flex items-start justify-between gap-3 border-b border-line px-5 pt-5 pb-4">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
             {/* Animé dans le panneau (réfléchit pendant la réponse, content quand une idée est acceptée) ; immobile dans le planning. */}
-            {/* Rendu seulement panneau ouvert : il arrive en volant depuis le bouton, et y repart à la fermeture. */}
-            {open && (
-              <motion.span layoutId={reduce ? undefined : MASCOT_LAYOUT_ID} transition={FLIGHT} className="flex">
-                <Biirbou mood={panelMood} bounce={answers} oops={refreshKey} followPointer className="size-10" />
-              </motion.span>
-            )}
+            {/* Arrive d'un petit bond une fois le panneau ouvert. */}
+            <motion.span
+              className="flex"
+              initial={reduce ? false : { scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 500, damping: 16, delay: 0.18 }}
+            >
+              <Biirbou mood={panelMood} bounce={answers} oops={refreshKey} followPointer className="size-10" />
+            </motion.span>
             {t("copilot.title")}
           </h2>
           <p className="truncate text-label-sm text-ink-soft">{trip.title}</p>
@@ -511,7 +531,8 @@ export function TripCopilot({
           </div>
         )}
       </div>
-    </aside>
+      </motion.div>
+    </motion.aside>
   );
 }
 
