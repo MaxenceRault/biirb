@@ -1294,7 +1294,26 @@
         "mine": "Les miens",
         "unassigned": "Non assignés"
       },
-      "me": "{name} (moi)"
+      "me": "{name} (moi)",
+      "columnOpen": "Voir et rechercher tous les tickets « {column} »",
+      "columnDialog": {
+        "title": "{column} · {count, plural, =0 {aucun ticket} one {# ticket} other {# tickets}}",
+        "close": "Fermer",
+        "search": "Rechercher un ticket",
+        "searchPlaceholder": "Titre, description, auteur ou n° (ex. #12)…",
+        "period": "Créés",
+        "periods": {
+          "all": "depuis toujours",
+          "7": "ces 7 derniers jours",
+          "30": "ces 30 derniers jours",
+          "90": "ces 3 derniers mois"
+        },
+        "order": {
+          "newest": "Plus récents d'abord",
+          "oldest": "Plus anciens d'abord"
+        },
+        "results": "{count, plural, =0 {Aucun ticket ne correspond} one {# ticket} other {# tickets}}"
+      }
     }
   },
   "TripExport": {

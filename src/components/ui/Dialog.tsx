@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { IconButton } from "@/components/ui/IconButton";
 
-const WIDTHS = { md: "w-[min(32rem,calc(100%-2rem))]", sm: "w-[min(26rem,calc(100%-2rem))]" } as const;
+const WIDTHS = { lg: "w-[min(48rem,calc(100%-2rem))]", md: "w-[min(32rem,calc(100%-2rem))]", sm: "w-[min(26rem,calc(100%-2rem))]" } as const;
 
 // Fenêtre modale : <dialog> natif (focus piégé, Échap, fond inerte). Fermée aussi par un clic sur le fond.
 // Apparition en fondu (@starting-style) ; navigateur sans support ou mouvement réduit : affichée directement.
@@ -20,7 +20,7 @@ export function Dialog({
   onClose: () => void;
   title: ReactNode;
   closeLabel: string;
-  // sm : fenêtre courte (confirmation).
+  // sm : fenêtre courte (confirmation) ; lg : liste longue (recherche).
   size?: keyof typeof WIDTHS;
   // Texte sous le titre, lu avec lui par les lecteurs d'écran (aria-describedby).
   description?: ReactNode;
