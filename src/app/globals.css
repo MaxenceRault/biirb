@@ -11,7 +11,7 @@
   --color-line: rgb(55 71 79 / 0.12); /* bordures fines */
   --color-accent: #ff5a5f; /* actions principales uniquement, jamais en grand fond */
   --color-on-accent: #ffffff; /* texte posé sur l'accent */
-  --color-logo: #868e96; /* logo : contraste ≥ 3:1 sur blanc (WCAG) */
+  --color-logo: #868e96; /* gris doux : « z » de Biirbou endormi (le logo est en encre, color-ink) */
   --color-error: #ba1a1a;
   /* Cases de la vue Tableau et des PDF (fond pâle + bande foncée) : clés de TRIP_ITEM_COLORS, valeurs reprises dans src/server/tripPdf.ts */
   --color-cell-coral: #ffe1dc;
