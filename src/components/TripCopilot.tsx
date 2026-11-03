@@ -120,6 +120,8 @@ export function CopilotLauncher({ onOpen, tired = false }: { onOpen: () => void;
   const reduce = useReducedMotion() ?? false;
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
+  // Appui maintenu : il gonfle ; relâché sur le bouton, le clic l'ouvre (écrasement puis vol).
+  const [holding, setHolding] = useState(false);
 
   // Il s'écrase un instant, puis s'envole vers l'en-tête du panneau (même layoutId) ; sans animation : tout de suite.
   function open() {
@@ -133,10 +135,18 @@ export function CopilotLauncher({ onOpen, tired = false }: { onOpen: () => void;
       type="button"
       onClick={open}
       onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
+      onPointerLeave={() => {
+        setHovered(false);
+        setHolding(false);
+      }}
+      onPointerDown={() => setHolding(true)}
+      onPointerUp={() => setHolding(false)}
+      onPointerCancel={() => setHolding(false)}
+      // Appui long sur mobile : pas de menu contextuel ni de sélection.
+      onContextMenu={(event) => event.preventDefault()}
       onFocus={() => setHovered(true)}
       onBlur={() => setHovered(false)}
-      className="group fixed right-4 bottom-4 z-40 flex items-center rounded-full border border-transparent p-1.5 font-display text-label-lg text-ink transition-all duration-300 ease-out hover:border-line hover:bg-surface hover:shadow-lg focus-visible:border-line focus-visible:bg-surface focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none motion-reduce:transition-none md:right-6 md:bottom-6"
+      className="group fixed right-4 bottom-4 z-40 flex touch-manipulation items-center rounded-full select-none [-webkit-touch-callout:none] border border-transparent p-1.5 font-display text-label-lg text-ink transition-all duration-300 ease-out hover:border-line hover:bg-surface hover:shadow-lg focus-visible:border-line focus-visible:bg-surface focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none motion-reduce:transition-none md:right-6 md:bottom-6"
     >
       {/* Quota du jour épuisé : Biirbou est fatigué. */}
       <motion.span layoutId={reduce ? undefined : MASCOT_LAYOUT_ID} transition={FLIGHT} className="flex">
@@ -144,6 +154,7 @@ export function CopilotLauncher({ onOpen, tired = false }: { onOpen: () => void;
           mood={tired ? "tired" : "idle"}
           hovered={hovered}
           pressed={pressed}
+          inflating={holding && !pressed}
           followPointer
           className="size-12 drop-shadow-md transition-[filter] duration-300 group-hover:drop-shadow-none group-focus-visible:drop-shadow-none"
         />

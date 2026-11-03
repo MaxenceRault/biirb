@@ -38,6 +38,7 @@ export function Biirbou({
   bounce = 0,
   oops = 0,
   pressed = false,
+  inflating = false,
   className = "size-6",
 }: {
   mood?: BiirbouMood;
@@ -48,6 +49,8 @@ export function Biirbou({
   oops?: number;
   // Écrasé (clic sur le bouton flottant, juste avant de s'envoler vers le panneau).
   pressed?: boolean;
+  // Appui maintenu : il gonfle (prioritaire sur le survol), puis tremble une fois plein.
+  inflating?: boolean;
   className?: string;
 }) {
   const reduce = (useReducedMotion() ?? false) || !animated;
@@ -158,8 +161,8 @@ export function Biirbou({
   const pupilColor = "fill-ink";
   const lineColor = "stroke-surface";
   // Ordre : réflexion (en l'air), survol (il te regarde), regard ailleurs, sinon la souris.
-  const pupil = mood === "thinking" ? { x: 2, y: -3 } : mood === "sad" ? { x: 0, y: 2.5 } : hovered ? { x: 0, y: 0.5 } : (glance ?? (followPointer ? gaze : { x: 0, y: 0 }));
-  const eyeScale = hovered && !reduce ? 1.12 : 1;
+  const pupil = mood === "thinking" ? { x: 2, y: -3 } : mood === "sad" ? { x: 0, y: 2.5 } : hovered || inflating ? { x: 0, y: 0.5 } : (glance ?? (followPointer ? gaze : { x: 0, y: 0 }));
+  const eyeScale = (hovered || inflating) && !reduce ? 1.12 : 1;
   const eyeOpen = blink ? 0.12 : mood === "tired" ? 0.5 : mood === "sad" ? 0.8 : 1;
   const showOpenEyes = !asleep && mood !== "happy";
 
@@ -179,6 +182,17 @@ export function Biirbou({
                 ? { rotate: 0, y: 0, scaleY: [1, 0.97], transition: { scaleY: { duration: 1.6, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" } } }
                 : pressed
                   ? { rotate: 0, y: 2, scaleX: 1.1, scaleY: 0.82, transition: { duration: 0.12, ease: "easeOut" } }
+                  : inflating
+                  ? {
+                      rotate: [-2, 2],
+                      y: -2,
+                      scaleX: 1.3,
+                      scaleY: 1.3,
+                      transition: {
+                        default: { duration: 0.9, ease: "easeOut" },
+                        rotate: { duration: 0.1, repeat: Infinity, repeatType: "mirror", delay: 0.8 },
+                      },
+                    }
                   : mood === "sad"
                   ? { rotate: [0, -5, 5, -3, 0], y: 1.5, scaleY: 0.96, transition: { rotate: { duration: 0.8, ease: "easeInOut" }, default: SPRING } }
                   : hovered
