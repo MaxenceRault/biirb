@@ -55,6 +55,8 @@ type Mutate = (path: string, method: string, body?: unknown) => Promise<boolean>
 export type CopilotAsk = { kind: "chat"; draft?: string } | { kind: "adapt"; day: string };
 export type CopilotRequest = CopilotAsk & { nonce: number };
 
+const CHEER_MS = 1_500;
+
 // Motifs d'imprévus proposés par « Adapter mon voyage » (textes dans messages/fr.json → Planner.copilot.adapt).
 const ADAPT_REASONS = ["rain", "tired", "late", "closed", "budget", "other"] as const;
 
@@ -113,7 +115,7 @@ export function CopilotLauncher({ onOpen }: { onOpen: () => void }) {
       onClick={onOpen}
       className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-full bg-ink px-5 py-3 font-display text-label-lg text-surface shadow-lg transition hover:bg-ink/90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none md:right-6 md:bottom-6"
     >
-      <Biirbou className="size-6" />
+      <Biirbou tone="light" className="size-6" />
       {t("copilot.launcher")}
     </button>
   );
@@ -154,6 +156,7 @@ export function TripCopilot({
   const [draft, setDraft] = useState("");
   const [adaptDay, setAdaptDay] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [cheering, setCheering] = useState(false);
   const [error, setError] = useState<PlannerError | null>(null);
   const panel = useRef<HTMLElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -259,6 +262,11 @@ export function TripCopilot({
   async function answer(suggestion: TripSuggestion, accepted: boolean) {
     const ok = await mutate(`/suggestions/${suggestion.id}`, "PATCH", { accepted });
     if (!ok) return loadMessages();
+    // Biirbou est content quand une de ses idées entre dans le planning.
+    if (accepted) {
+      setCheering(true);
+      setTimeout(() => setCheering(false), CHEER_MS);
+    }
     const status = accepted ? "accepted" : "rejected";
     setMessages((current) =>
       (current ?? []).map((message) => ({
@@ -281,7 +289,7 @@ export function TripCopilot({
       <div className="flex items-start justify-between gap-3 border-b border-line px-5 pt-5 pb-4">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
-            <Biirbou className="size-7" />
+            <Biirbou mood={sending ? "thinking" : cheering ? "happy" : "idle"} className="size-8" />
             {t("copilot.title")}
           </h2>
           <p className="truncate text-label-sm text-ink-soft">{trip.title}</p>
