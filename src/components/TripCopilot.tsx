@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/Badge";
+import { Biirbou } from "@/components/ui/Biirbou";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FormError } from "@/components/ui/FormError";
@@ -77,7 +78,7 @@ export function CopilotCard({ detail, onOpen }: { detail: TripDetail; onOpen: (r
     <Card className="flex flex-col gap-4 p-6">
       <div className="flex flex-col gap-1">
         <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
-          <Icon name="sparkles" className="size-5 text-accent" />
+          <Biirbou className="size-7" />
           {t("copilot.title")}
         </h2>
         <p className="text-body-sm text-ink-soft">{t(`copilot.cardText.${moment.kind}`)}</p>
@@ -112,7 +113,7 @@ export function CopilotLauncher({ onOpen }: { onOpen: () => void }) {
       onClick={onOpen}
       className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-full bg-ink px-5 py-3 font-display text-label-lg text-surface shadow-lg transition hover:bg-ink/90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none md:right-6 md:bottom-6"
     >
-      <Icon name="sparkles" className="size-5 text-accent" />
+      <Biirbou className="size-6" />
       {t("copilot.launcher")}
     </button>
   );
@@ -280,7 +281,7 @@ export function TripCopilot({
       <div className="flex items-start justify-between gap-3 border-b border-line px-5 pt-5 pb-4">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
-            <Icon name="sparkles" className="size-5 text-accent" />
+            <Biirbou className="size-7" />
             {t("copilot.title")}
           </h2>
           <p className="truncate text-label-sm text-ink-soft">{trip.title}</p>

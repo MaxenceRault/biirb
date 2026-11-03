@@ -101,7 +101,7 @@ src/
 ├── i18n/
 │   └── request.ts             # Config next-intl (locale + chargement des messages)
 ├── components/
-│   ├── ui/                    # Design system : ReasoningText (l'IA travaille : phrases en cascade, avec motion), EmptyState, Button, IconButton, Input, Textarea, Autocomplete, PasswordInput, Label, Field, Checkbox, Card, Icon, Avatar, Logo, Badge, FilterChip (puce de filtre + FilterBar, filterChipClassName pour un Link : accueil, Kanban), Dialog (fenêtre modale <dialog> natif), ConfirmDialog (fenêtre de confirmation commune : ConfirmProvider dans le layout + hook useConfirm ; titre, explication, verbe d'action, icône, ton danger)
+│   ├── ui/                    # Design system : ReasoningText (l'IA travaille : phrases en cascade, avec motion), EmptyState, Button, IconButton, Input, Textarea, Autocomplete, PasswordInput, Label, Field, Checkbox, Card, Icon, Avatar, Logo, Biirbou (mascotte : hibou au trait du logo, bec à l'accent, couleur du texte ; carte, panneau et bouton du copilote), Badge, FilterChip (puce de filtre + FilterBar, filterChipClassName pour un Link : accueil, Kanban), Dialog (fenêtre modale <dialog> natif), ConfirmDialog (fenêtre de confirmation commune : ConfirmProvider dans le layout + hook useConfirm ; titre, explication, verbe d'action, icône, ton danger)
 │   ├── Navbar.tsx             # Barre du haut (version visiteur / connecté)
 │   ├── NavbarAccount.tsx      # Zone compte de la Navbar (client : lit la session du navigateur)
 │   ├── Footer.tsx
