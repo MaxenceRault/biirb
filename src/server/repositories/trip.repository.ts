@@ -59,6 +59,8 @@ export type TripItemRow = {
   color: TripItemColor | null;
   // Proposée par Biirbou ou saisie à la main.
   origin: TripItemOrigin;
+  // Nom du lieu donné par Biirbou (« Meiji Jingu »), cherché pour les temps de trajet ; null : pas de lieu précis.
+  place_name: string | null;
   source_post: { id: number; title: string; slug: string } | null;
 };
 
@@ -79,7 +81,15 @@ export type NewTrip = {
 };
 
 export type TripPlan = {
-  items: { day: string; start_time: string; title: string; description: string | null; category: TripItemCategory; source_post_id: number | null }[];
+  items: {
+    day: string;
+    start_time: string;
+    title: string;
+    description: string | null;
+    category: TripItemCategory;
+    source_post_id: number | null;
+    place_name: string | null;
+  }[];
   tasks: { label: string; detail: string | null; done: boolean }[];
   budget: { lodging: number; transit: number; dining: number; activities: number };
   source_post_count: number;
@@ -133,7 +143,12 @@ export type NewTripExchange = {
   user_content: string;
   assistant_content: string;
   off_topic: boolean;
-  suggestions: (TripItemFields & { source_post_id: number | null; action: TripSuggestionAction; target_item_id: number | null })[];
+  suggestions: (TripItemFields & {
+    source_post_id: number | null;
+    place_name: string | null;
+    action: TripSuggestionAction;
+    target_item_id: number | null;
+  })[];
 };
 
 // Noms de colonnes issus de cette liste, jamais de l'entrée utilisateur.
@@ -146,7 +161,7 @@ const TRIP_SUMMARY_COLUMNS = `t.public_id as id, t.title, t.destination_country_
   (select count(*)::int from trip_destination d where d.trip_id = t.id) as destination_count`;
 
 // Postgres renvoie « HH:MM:SS ».
-const ITEM_COLUMNS_SELECT = `i.id, i.day, to_char(i.start_time, 'HH24:MI') as start_time, i.title, i.description, i.category, i.color, i.origin,
+const ITEM_COLUMNS_SELECT = `i.id, i.day, to_char(i.start_time, 'HH24:MI') as start_time, i.title, i.description, i.category, i.color, i.place_name, i.origin,
   case when p.id is null then null else json_build_object('id', p.id, 'title', p.title, 'slug', p.slug) end as source_post`;
 
 // Clé interne (suite du traitement) et identifiant public (renvoyé au client). Voyage et étapes dans une transaction.
@@ -309,8 +324,8 @@ export async function replaceTripPlan(tripId: number, plan: TripPlan, { record }
 
     if (plan.items.length > 0) {
       await client.query(
-        `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id)
-         select $1, * from unnest($2::date[], $3::time[], $4::varchar[], $5::varchar[], $6::trip_item_category[], $7::int[])`,
+        `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, place_name)
+         select $1, * from unnest($2::date[], $3::time[], $4::varchar[], $5::varchar[], $6::trip_item_category[], $7::int[], $8::varchar[])`,
         [
           tripId,
           plan.items.map((item) => item.day),
@@ -319,6 +334,7 @@ export async function replaceTripPlan(tripId: number, plan: TripPlan, { record }
           plan.items.map((item) => item.description),
           plan.items.map((item) => item.category),
           plan.items.map((item) => item.source_post_id),
+          plan.items.map((item) => item.place_name),
         ],
       );
     }
@@ -356,8 +372,8 @@ export async function replaceTripDayItems(tripId: number, day: string, items: Tr
     await client.query("delete from trip_item where trip_id = $1 and day = $2", [tripId, day]);
     if (items.length > 0) {
       await client.query(
-        `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id)
-         select $1, * from unnest($2::date[], $3::time[], $4::varchar[], $5::varchar[], $6::trip_item_category[], $7::int[])`,
+        `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, place_name)
+         select $1, * from unnest($2::date[], $3::time[], $4::varchar[], $5::varchar[], $6::trip_item_category[], $7::int[], $8::varchar[])`,
         [
           tripId,
           items.map((item) => item.day),
@@ -366,6 +382,7 @@ export async function replaceTripDayItems(tripId: number, day: string, items: Tr
           items.map((item) => item.description),
           items.map((item) => item.category),
           items.map((item) => item.source_post_id),
+          items.map((item) => item.place_name),
         ],
       );
     }
@@ -394,9 +411,12 @@ export async function updateTripItem(tripId: number, itemId: number, changes: Tr
   const entries = ITEM_COLUMNS.filter((column) => changes[column] !== undefined).map((column) => [column, changes[column]] as const);
   if (entries.length === 0) return true;
 
+  // Titre changé : le lieu donné par Biirbou ne correspond plus (à droite du =, title est encore l'ancien titre).
+  const titleParam = entries.findIndex(([column]) => column === "title");
+  const placeReset = titleParam === -1 ? "" : `, place_name = case when title = $${titleParam + 3}::varchar then place_name end`;
   const db = await getDb();
   const { rowCount } = await db.query(
-    `update trip_item set ${entries.map(([column], index) => `${column} = $${index + 3}`).join(", ")}
+    `update trip_item set ${entries.map(([column], index) => `${column} = $${index + 3}`).join(", ")}${placeReset}
      where id = $1 and trip_id = $2`,
     [itemId, tripId, ...entries.map(([, value]) => value)],
   );
@@ -490,9 +510,10 @@ export async function insertTripExchange(tripId: number, authorId: string, excha
     const { suggestions } = exchange;
     if (suggestions.length > 0) {
       await client.query(
-        `insert into trip_suggestion (trip_id, message_id, day, start_time, title, description, category, source_post_id, action, target_item_id)
+        `insert into trip_suggestion (trip_id, message_id, day, start_time, title, description, category, source_post_id, action, target_item_id,
+           place_name)
          select $1, $2, * from unnest($3::date[], $4::time[], $5::varchar[], $6::varchar[], $7::trip_item_category[], $8::int[],
-           $9::trip_suggestion_action[], $10::int[])`,
+           $9::trip_suggestion_action[], $10::int[], $11::varchar[])`,
         [
           tripId,
           rows[0].id,
@@ -504,6 +525,7 @@ export async function insertTripExchange(tripId: number, authorId: string, excha
           suggestions.map((item) => item.source_post_id),
           suggestions.map((item) => item.action),
           suggestions.map((item) => item.target_item_id),
+          suggestions.map((item) => item.place_name),
         ],
       );
     }
@@ -562,8 +584,8 @@ async function applySuggestion(
 ): Promise<boolean> {
   if (action === "add") {
     await client.query(
-      `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id)
-       select trip_id, day, start_time, title, description, category, source_post_id
+      `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, place_name)
+       select trip_id, day, start_time, title, description, category, source_post_id, place_name
        from trip_suggestion where id = $1`,
       [suggestionId],
     );
@@ -577,7 +599,7 @@ async function applySuggestion(
   const { rowCount } = await client.query(
     `update trip_item i
      set day = s.day, start_time = s.start_time, title = s.title, description = s.description, category = s.category,
-       source_post_id = s.source_post_id, origin = 'ai'
+       source_post_id = s.source_post_id, place_name = s.place_name, origin = 'ai'
      from trip_suggestion s
      where s.id = $1 and i.id = $2 and i.trip_id = $3`,
     [suggestionId, targetId, tripId],
@@ -589,6 +611,12 @@ async function applySuggestion(
 // Contenu seulement (jamais les ids) : un planning restauré a de nouveaux ids mais la même empreinte.
 const PLAN_ITEMS = `coalesce((select json_agg(json_build_object('day', i.day, 'start_time', i.start_time, 'title', i.title,
     'description', i.description, 'category', i.category, 'source_post_id', i.source_post_id, 'color', i.color, 'origin', i.origin)
+    order by i.day, i.start_time, i.title, i.description, i.category, i.color, i.source_post_id, i.origin)
+  from trip_item i where i.trip_id = $1), '[]'::json)`;
+// Photo : le lieu en plus. Hors de l'empreinte : il ne change qu'avec le titre (déjà dedans) ou par Biirbou.
+const PLAN_ITEMS_SNAPSHOT = `coalesce((select json_agg(json_build_object('day', i.day, 'start_time', i.start_time, 'title', i.title,
+    'description', i.description, 'category', i.category, 'source_post_id', i.source_post_id, 'color', i.color, 'origin', i.origin,
+    'place_name', i.place_name)
     order by i.day, i.start_time, i.title, i.description, i.category, i.color, i.source_post_id, i.origin)
   from trip_item i where i.trip_id = $1), '[]'::json)`;
 const PLAN_TASKS = `coalesce((select json_agg(json_build_object('label', t.label, 'detail', t.detail, 'done', t.done) order by t.id)
@@ -613,7 +641,7 @@ type Queryable = Pick<PoolClient, "query">;
 async function readPlanState(db: Queryable, tripId: number, kind: TripPlanChangeKind): Promise<{ snapshot: unknown; fingerprint: string }> {
   const full = kind === "regenerate";
   const { rows } = await db.query<{ snapshot: unknown; fingerprint: string }>(
-    `select json_build_object('items', ${PLAN_ITEMS}${full ? `, 'tasks', ${PLAN_TASKS}, 'stops', ${PLAN_STOPS}, 'trip', ${PLAN_TRIP}` : ""}) as snapshot,
+    `select json_build_object('items', ${PLAN_ITEMS_SNAPSHOT}${full ? `, 'tasks', ${PLAN_TASKS}, 'stops', ${PLAN_STOPS}, 'trip', ${PLAN_TRIP}` : ""}) as snapshot,
        md5(json_build_array(${PLAN_ITEMS}${full ? `, ${PLAN_TASK_LABELS}, ${PLAN_STOPS}, ${PLAN_TRIP_FINGERPRINT}` : ""})::text) as fingerprint`,
     [tripId],
   );
@@ -675,15 +703,15 @@ export async function undoLastPlanChange(tripId: number): Promise<"undone" | "no
 
     // Récit supprimé depuis : l'activité restaurée perd seulement son lien (comme le on delete set null de trip_item).
     await client.query("delete from trip_item where trip_id = $1", [tripId]);
-    // Photo prise avant la provenance des activités : origin absent, activité de Biirbou.
+    // Photo prise avant la provenance ou le lieu des activités : origin absent = activité de Biirbou, place_name absent = null.
     await client.query(
-      `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, color, origin)
+      `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, color, origin, place_name)
        select $1, x.day, x.start_time, x.title, x.description, x.category, (select p.id from post p where p.id = x.source_post_id), x.color,
-         coalesce(x.origin, 'ai')
+         coalesce(x.origin, 'ai'), x.place_name
        from trip_plan_change c,
          jsonb_to_recordset(c.snapshot -> 'items')
            as x (day date, start_time time, title varchar, description varchar, category trip_item_category, source_post_id int, color varchar,
-             origin trip_item_origin)
+             origin trip_item_origin, place_name varchar)
        where c.id = $2`,
       [tripId, change.id],
     );
