@@ -37,6 +37,7 @@ export function Biirbou({
   followPointer = false,
   bounce = 0,
   oops = 0,
+  pressed = false,
   className = "size-6",
 }: {
   mood?: BiirbouMood;
@@ -45,6 +46,8 @@ export function Biirbou({
   followPointer?: boolean;
   bounce?: number;
   oops?: number;
+  // Écrasé (clic sur le bouton flottant, juste avant de s'envoler vers le panneau).
+  pressed?: boolean;
   className?: string;
 }) {
   const reduce = (useReducedMotion() ?? false) || !animated;
@@ -174,11 +177,13 @@ export function Biirbou({
               ? { rotate: [-6, 6], y: 0, scaleY: 1, transition: { rotate: { duration: 0.8, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" } } }
               : asleep
                 ? { rotate: 0, y: 0, scaleY: [1, 0.97], transition: { scaleY: { duration: 1.6, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" } } }
-                : mood === "sad"
+                : pressed
+                  ? { rotate: 0, y: 2, scaleX: 1.1, scaleY: 0.82, transition: { duration: 0.12, ease: "easeOut" } }
+                  : mood === "sad"
                   ? { rotate: [0, -5, 5, -3, 0], y: 1.5, scaleY: 0.96, transition: { rotate: { duration: 0.8, ease: "easeInOut" }, default: SPRING } }
                   : hovered
-                  ? { rotate: -8, y: -3, scaleY: 1.04, transition: SPRING }
-                  : { rotate: 0, y: 0, scaleY: 1, transition: SPRING }
+                  ? { rotate: -8, y: -3, scaleX: 1, scaleY: 1.04, transition: SPRING }
+                  : { rotate: 0, y: 0, scaleX: 1, scaleY: 1, transition: SPRING }
         }
       >
         {/* Plumes ébouriffées : une secousse à chaque nouvelle clé. */}

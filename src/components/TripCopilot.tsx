@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useFormatter, useTranslations } from "next-intl";
+import { motion, useReducedMotion } from "motion/react";
 import { Badge } from "@/components/ui/Badge";
 import { Biirbou } from "@/components/ui/Biirbou";
 import { useOnline } from "@/client/hooks/useOnline";
@@ -57,6 +58,10 @@ export type CopilotAsk = { kind: "chat"; draft?: string } | { kind: "adapt"; day
 export type CopilotRequest = CopilotAsk & { nonce: number };
 
 const CHEER_MS = 1_500;
+// Clic sur le bouton flottant : écrasement, puis vol de la mascotte vers le panneau (Motion, même layoutId).
+const PRESS_MS = 140;
+const MASCOT_LAYOUT_ID = "biirbou-mascot";
+const FLIGHT = { type: "spring", stiffness: 260, damping: 26 } as const;
 
 // Motifs d'imprévus proposés par « Adapter mon voyage » (textes dans messages/fr.json → Planner.copilot.adapt).
 const ADAPT_REASONS = ["rain", "tired", "late", "closed", "budget", "other"] as const;
@@ -112,11 +117,21 @@ export function CopilotCard({ detail, onOpen }: { detail: TripDetail; onOpen: (r
 // les lecteurs d'écran).
 export function CopilotLauncher({ onOpen, tired = false }: { onOpen: () => void; tired?: boolean }) {
   const t = useTranslations("Planner");
+  const reduce = useReducedMotion() ?? false;
   const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  // Il s'écrase un instant, puis s'envole vers l'en-tête du panneau (même layoutId) ; sans animation : tout de suite.
+  function open() {
+    if (reduce) return onOpen();
+    setPressed(true);
+    setTimeout(onOpen, PRESS_MS);
+  }
+
   return (
     <button
       type="button"
-      onClick={onOpen}
+      onClick={open}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       onFocus={() => setHovered(true)}
@@ -124,12 +139,15 @@ export function CopilotLauncher({ onOpen, tired = false }: { onOpen: () => void;
       className="group fixed right-4 bottom-4 z-40 flex items-center rounded-full border border-transparent p-1.5 font-display text-label-lg text-ink transition-all duration-300 ease-out hover:border-line hover:bg-surface hover:shadow-lg focus-visible:border-line focus-visible:bg-surface focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none motion-reduce:transition-none md:right-6 md:bottom-6"
     >
       {/* Quota du jour épuisé : Biirbou est fatigué. */}
-      <Biirbou
-        mood={tired ? "tired" : "idle"}
-        hovered={hovered}
-        followPointer
-        className="size-12 drop-shadow-md transition-[filter] duration-300 group-hover:drop-shadow-none group-focus-visible:drop-shadow-none"
-      />
+      <motion.span layoutId={reduce ? undefined : MASCOT_LAYOUT_ID} transition={FLIGHT} className="flex">
+        <Biirbou
+          mood={tired ? "tired" : "idle"}
+          hovered={hovered}
+          pressed={pressed}
+          followPointer
+          className="size-12 drop-shadow-md transition-[filter] duration-300 group-hover:drop-shadow-none group-focus-visible:drop-shadow-none"
+        />
+      </motion.span>
       <span className="max-w-0 -translate-x-2 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:mr-3 group-hover:ml-2 group-hover:max-w-xs group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:mr-3 group-focus-visible:ml-2 group-focus-visible:max-w-xs group-focus-visible:translate-x-0 group-focus-visible:opacity-100 motion-reduce:transition-none">
         {t("copilot.launcher")}
       </span>
@@ -177,6 +195,7 @@ export function TripCopilot({
   // Réponses reçues : Biirbou saute à chaque nouvelle réponse.
   const [answers, setAnswers] = useState(0);
   const online = useOnline();
+  const reduce = useReducedMotion() ?? false;
   const [error, setError] = useState<PlannerError | null>(null);
   const panel = useRef<HTMLElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -322,7 +341,12 @@ export function TripCopilot({
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
             {/* Animé dans le panneau (réfléchit pendant la réponse, content quand une idée est acceptée) ; immobile dans le planning. */}
-            <Biirbou mood={panelMood} bounce={answers} oops={refreshKey} followPointer className="size-8" />
+            {/* Rendu seulement panneau ouvert : il arrive en volant depuis le bouton, et y repart à la fermeture. */}
+            {open && (
+              <motion.span layoutId={reduce ? undefined : MASCOT_LAYOUT_ID} transition={FLIGHT} className="flex">
+                <Biirbou mood={panelMood} bounce={answers} oops={refreshKey} followPointer className="size-8" />
+              </motion.span>
+            )}
             {t("copilot.title")}
           </h2>
           <p className="truncate text-label-sm text-ink-soft">{trip.title}</p>
