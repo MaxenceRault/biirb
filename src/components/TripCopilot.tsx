@@ -32,7 +32,15 @@ import {
 import { currencyDecimals } from "@/schemas/trip-expense.schema";
 import { FilterBar, FilterChip } from "@/components/ui/FilterChip";
 import { ENERGY_ICONS, WhatNowDialog } from "@/components/TripWhatNow";
-import { TRIP_ENERGY_LEVELS, TRIP_MEMORY_MAX, TRIP_MESSAGE_MAX, type TripEnergyLevel, type TripMessageContext } from "@/schemas/trip.schema";
+import {
+  TRIP_DISRUPTIONS,
+  TRIP_ENERGY_LEVELS,
+  TRIP_MEMORY_MAX,
+  TRIP_MESSAGE_MAX,
+  type TripDisruption,
+  type TripEnergyLevel,
+  type TripMessageContext,
+} from "@/schemas/trip.schema";
 
 type TripSuggestion = Omit<TripItem, "id" | "color" | "origin" | "version"> & {
   id: number;
@@ -62,9 +70,6 @@ export type CopilotRequest = CopilotAsk & { nonce: number };
 const CHEER_MS = 1_500;
 // Bouton flottant : écrasé à l'appui, gonflé au-delà de HOLD_MS ; le clic ouvre le panneau aussitôt.
 const HOLD_MS = 150;
-
-// Motifs d'imprévus proposés par « Adapter mon voyage » (textes dans messages/fr.json → Planner.copilot.adapt).
-const ADAPT_REASONS = ["rain", "tired", "late", "closed", "budget", "other"] as const;
 
 // Heure de l'appareil avec son décalage : en voyage, l'heure locale du voyageur (revérifiée par le serveur).
 function clientTimeNow() {
@@ -218,6 +223,7 @@ export function TripCopilot({
   const [adaptDay, setAdaptDay] = useState<string | null>(null);
   // Énergie choisie pour adapter la journée : envoyée avec le message, puis oubliée.
   const [adaptEnergy, setAdaptEnergy] = useState<TripEnergyLevel | null>(null);
+  const [adaptReason, setAdaptReason] = useState<TripDisruption | null>(null);
   const [whatNow, setWhatNow] = useState(false);
   // Message en cours d'envoi (affiché tout de suite, avant la réponse de Biirbou).
   const [pending, setPending] = useState<string | null>(null);
@@ -275,6 +281,7 @@ export function TripCopilot({
     setAppliedNonce(request.nonce);
     setAdaptDay(request.kind === "adapt" ? request.day : null);
     setAdaptEnergy(null);
+    setAdaptReason(null);
     if (request.kind === "chat" && request.draft) setDraft(request.draft);
     if (request.kind === "whatNow") setWhatNow(true);
   }
@@ -331,12 +338,28 @@ export function TripCopilot({
     return false;
   }
 
+  // Motif choisi : phrase fixe affichée dans la discussion, suivie des précisions du voyageur ; le serveur reçoit
+  // aussi le motif comme valeur connue (disruption), qu'il traduit lui-même pour Biirbou.
+  const adaptPrefix =
+    adaptDay && adaptReason
+      ? t("copilot.adapt.message", {
+          number: days.indexOf(adaptDay) + 1,
+          date: format.dateTime(parseDay(adaptDay), { weekday: "long", day: "numeric", month: "long" }),
+          reason: t(`copilot.adapt.reasons.${adaptReason}.text`),
+        })
+      : null;
+
   async function sendDraft() {
-    const sent = await send(draft.trim(), adaptDay && adaptEnergy ? { energy: adaptEnergy } : {});
+    const content = [adaptPrefix, draft.trim()].filter(Boolean).join("\n");
+    const context = adaptDay
+      ? { ...(adaptEnergy && { energy: adaptEnergy }), ...(adaptReason && { disruption: { reason: adaptReason, day: adaptDay } }) }
+      : {};
+    const sent = await send(content, context);
     if (!sent) return;
     setDraft("");
     setAdaptDay(null);
     setAdaptEnergy(null);
+    setAdaptReason(null);
   }
 
   function openWhatNow() {
@@ -354,17 +377,6 @@ export function TripCopilot({
       event.preventDefault();
       void sendDraft();
     }
-  }
-
-  function chooseReason(reason: (typeof ADAPT_REASONS)[number], day: string) {
-    setDraft(
-      t("copilot.adapt.message", {
-        number: days.indexOf(day) + 1,
-        date: format.dateTime(parseDay(day), { weekday: "long", day: "numeric", month: "long" }),
-        reason: t(`copilot.adapt.reasons.${reason}.text`),
-      }),
-    );
-    input.current?.focus();
   }
 
   async function answer(suggestion: TripSuggestion, accepted: boolean) {
@@ -481,21 +493,29 @@ export function TripCopilot({
                   date: format.dateTime(parseDay(adaptDay), { day: "numeric", month: "short" }),
                 })}
               </p>
-              <IconButton icon="close" label={t("copilot.adapt.dismiss")} onClick={() => setAdaptDay(null)} />
+              <IconButton
+                icon="close"
+                label={t("copilot.adapt.dismiss")}
+                onClick={() => {
+                  setAdaptDay(null);
+                  setAdaptReason(null);
+                }}
+              />
             </div>
-            <ul className="flex flex-wrap gap-2" aria-label={t("copilot.adapt.reasonsLabel")}>
-              {ADAPT_REASONS.map((reason) => (
-                <li key={reason}>
-                  <button
-                    type="button"
-                    onClick={() => chooseReason(reason, adaptDay)}
-                    className="rounded-full border border-line px-3 py-1.5 text-label-md text-ink transition hover:border-accent hover:text-accent focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:outline-none"
-                  >
-                    {t(`copilot.adapt.reasons.${reason}.label`)}
-                  </button>
-                </li>
+            <FilterBar label={t("copilot.adapt.reasonsLabel")}>
+              {TRIP_DISRUPTIONS.map((reason) => (
+                <FilterChip
+                  key={reason}
+                  active={adaptReason === reason}
+                  onClick={() => {
+                    setAdaptReason((current) => (current === reason ? null : reason));
+                    input.current?.focus();
+                  }}
+                >
+                  {t(`copilot.adapt.reasons.${reason}.label`)}
+                </FilterChip>
               ))}
-            </ul>
+            </FilterBar>
             <FilterBar label={t("whatNow.energy.label")}>
               {TRIP_ENERGY_LEVELS.map((level) => (
                 <FilterChip key={level} active={adaptEnergy === level} onClick={() => setAdaptEnergy((current) => (current === level ? null : level))}>
@@ -531,11 +551,11 @@ export function TripCopilot({
                 value={draft}
                 onChange={(event) => setDraft(event.currentTarget.value)}
                 onKeyDown={handleKeyDown}
-                minLength={2}
-                maxLength={TRIP_MESSAGE_MAX}
+                minLength={adaptPrefix ? undefined : 2}
+                maxLength={TRIP_MESSAGE_MAX - (adaptPrefix ? adaptPrefix.length + 1 : 0)}
                 rows={2}
-                placeholder={t("chat.placeholder")}
-                required
+                placeholder={t(adaptPrefix ? "copilot.adapt.details" : "chat.placeholder")}
+                required={!adaptPrefix}
                 className="max-h-40"
               />
               {quotaReached && !passActive ? (

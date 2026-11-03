@@ -21,6 +21,10 @@ export type TravelProfile = (typeof TRAVEL_PROFILES)[number];
 // Énergie du voyageur (« Que faire maintenant ? ») : fatigué, motivé, envie de détente.
 export const TRIP_ENERGY_LEVELS = ["tired", "motivated", "relaxed"] as const;
 export type TripEnergyLevel = (typeof TRIP_ENERGY_LEVELS)[number];
+// Motifs d'imprévus (« Adapter ma journée ») : valeurs connues, traduites par le serveur en libellés fixes pour Biirbou.
+// La fatigue passe par l'énergie (TRIP_ENERGY_LEVELS).
+export const TRIP_DISRUPTIONS = ["rain", "closed", "late", "cancelled", "budget", "wish"] as const;
+export type TripDisruption = (typeof TRIP_DISRUPTIONS)[number];
 // « Je suis à… » : un quartier ou un lieu.
 export const TRIP_PLACE_MAX = 100;
 // Mêmes limites que trip_destination et trip.instructions (db/migrations).
@@ -107,7 +111,8 @@ const coordinate = (limit: number) =>
     .transform((value) => Math.round(value * 100) / 100);
 
 // Contexte du moment, envoyé avec la question puis oublié (jamais enregistré) : heure de l'appareil ; pour « Que faire
-// maintenant ? », position GPS arrondie ou lieu écrit à la main (l'un ou l'autre) et énergie.
+// maintenant ? », position GPS arrondie ou lieu écrit à la main (l'un ou l'autre) et énergie ; pour « Adapter ma
+// journée », motif de l'imprévu et jour concerné.
 export const sendTripMessageSchema = z
   .strictObject({
     content: z.string().trim().min(2).max(TRIP_MESSAGE_MAX),
@@ -116,6 +121,7 @@ export const sendTripMessageSchema = z
     position: z.strictObject({ latitude: coordinate(90), longitude: coordinate(180) }).optional(),
     place: z.string().trim().min(2).max(TRIP_PLACE_MAX).optional(),
     energy: z.enum(TRIP_ENERGY_LEVELS).optional(),
+    disruption: z.strictObject({ reason: z.enum(TRIP_DISRUPTIONS), day: isoDate }).optional(),
   })
   .refine((body) => !(body.position && body.place));
 export type TripMessageContext = Omit<z.infer<typeof sendTripMessageSchema>, "content">;

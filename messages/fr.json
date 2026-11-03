@@ -905,31 +905,32 @@
         "title": "Que se passe-t-il le jour {number} ({date}) ?",
         "dismiss": "Fermer le choix de l'imprévu",
         "reasonsLabel": "Imprévus",
-        "message": "Imprévu le jour {number} ({date}) : {reason}. Adapte cette journée en gardant ce qui n'est pas touché.",
+        "message": "Imprévu le jour {number} ({date}) : {reason}.",
+        "details": "Précisez si besoin (facultatif)",
         "reasons": {
           "rain": {
             "label": "Il pleut",
-            "text": "il pleut, je préfère des activités à l'abri"
-          },
-          "tired": {
-            "label": "Je suis fatigué·e",
-            "text": "je suis fatigué·e et je veux lever le pied"
-          },
-          "late": {
-            "label": "J'ai du retard",
-            "text": "j'ai pris du retard sur le programme"
+            "text": "il pleut"
           },
           "closed": {
             "label": "Un lieu est fermé",
             "text": "un lieu prévu est fermé"
           },
+          "late": {
+            "label": "J'ai du retard",
+            "text": "j'ai pris du retard sur le programme"
+          },
+          "cancelled": {
+            "label": "Activité annulée",
+            "text": "une activité prévue est annulée"
+          },
           "budget": {
             "label": "Budget serré",
             "text": "je dois dépenser moins que prévu"
           },
-          "other": {
-            "label": "Autre",
-            "text": "(décrivez ce qui change)"
+          "wish": {
+            "label": "Une envie",
+            "text": "j'ai une nouvelle envie"
           }
         }
       },
