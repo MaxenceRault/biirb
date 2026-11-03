@@ -21,8 +21,8 @@ const GLANCES = [
 
 const random = (min: number, max: number) => min + Math.random() * (max - min);
 
-// Mascotte de Biirbou : hibou plein encre aux yeux blancs, bec à l'accent, partout le même (sur fond foncé : le poser
-// sur un rond blanc, jamais inverser ses couleurs).
+// Mascotte de Biirbou : hibou plein, du gris du logo (lisible sur fond clair comme sur le bouton encre), yeux blancs,
+// bec à l'accent ; partout le même, jamais d'autres couleurs.
 // Décoratif : son nom est toujours écrit à côté. Animations en SVG + Motion, aucune si l'utilisateur les réduit,
 // en pause quand l'onglet n'est pas visible.
 export function Biirbou({ mood = "idle", className = "size-6" }: { mood?: BiirbouMood; className?: string }) {
@@ -93,8 +93,9 @@ export function Biirbou({ mood = "idle", className = "size-6" }: { mood?: Biirbo
     };
   }, [mood, reduce]);
 
-  const bodyColor = "fill-ink";
+  const bodyColor = "fill-logo";
   const eyeColor = "fill-surface";
+  const pupilColor = "fill-ink";
   const lineColor = "stroke-surface";
   const pupil = mood === "thinking" ? { x: 2, y: -3 } : glance;
   const showOpenEyes = !asleep && mood !== "happy";
@@ -124,7 +125,7 @@ export function Biirbou({ mood = "idle", className = "size-6" }: { mood?: Biirbo
           [24, 40].map((cx) => (
             <motion.g key={cx} style={{ originX: 0.5, originY: 0.5 }} animate={{ scaleY: blink ? 0.12 : 1 }} transition={{ duration: 0.07 }}>
               <circle cx={cx} cy="32" r="8.5" className={eyeColor} />
-              <motion.circle cx={cx} cy="33" r="4" className={bodyColor} animate={reduce ? undefined : pupil} transition={SPRING} />
+              <motion.circle cx={cx} cy="33" r="4" className={pupilColor} animate={reduce ? undefined : pupil} transition={SPRING} />
             </motion.g>
           ))}
         {/* Yeux fermés (dort) ou en accent circonflexe (content). */}
