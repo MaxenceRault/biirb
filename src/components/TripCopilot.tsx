@@ -86,7 +86,7 @@ export function CopilotCard({ detail, onOpen }: { detail: TripDetail; onOpen: (r
     <Card className="flex flex-col gap-4 p-6">
       <div className="flex flex-col gap-1">
         <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
-          <Biirbou animated={false} className="size-7" />
+          <Biirbou animated={false} className="size-9" />
           {t("copilot.title")}
         </h2>
         <p className="text-body-sm text-ink-soft">{t(`copilot.cardText.${moment.kind}`)}</p>
@@ -156,7 +156,7 @@ export function CopilotLauncher({ onOpen, tired = false }: { onOpen: () => void;
           pressed={pressed}
           inflating={holding && !pressed}
           followPointer
-          className="size-12 drop-shadow-md transition-[filter] duration-300 group-hover:drop-shadow-none group-focus-visible:drop-shadow-none"
+          className="size-16 drop-shadow-md transition-[filter] duration-300 group-hover:drop-shadow-none group-focus-visible:drop-shadow-none"
         />
       </motion.span>
       <span className="max-w-0 -translate-x-2 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:mr-3 group-hover:ml-2 group-hover:max-w-xs group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:mr-3 group-focus-visible:ml-2 group-focus-visible:max-w-xs group-focus-visible:translate-x-0 group-focus-visible:opacity-100 motion-reduce:transition-none">
@@ -355,7 +355,7 @@ export function TripCopilot({
             {/* Rendu seulement panneau ouvert : il arrive en volant depuis le bouton, et y repart à la fermeture. */}
             {open && (
               <motion.span layoutId={reduce ? undefined : MASCOT_LAYOUT_ID} transition={FLIGHT} className="flex">
-                <Biirbou mood={panelMood} bounce={answers} oops={refreshKey} followPointer className="size-8" />
+                <Biirbou mood={panelMood} bounce={answers} oops={refreshKey} followPointer className="size-10" />
               </motion.span>
             )}
             {t("copilot.title")}
