@@ -503,7 +503,7 @@ function KanbanColumns({
             }}
             onDragLeave={() => setOver((current) => (current === column ? null : current))}
             onDrop={(event) => drop(event, column)}
-            className={`flex w-72 shrink-0 flex-col gap-3 rounded-lg p-3 transition lg:w-auto ${
+            className={`flex w-80 shrink-0 flex-col gap-3 rounded-lg p-3 transition lg:w-auto ${
               over === column ? "bg-accent/10 ring-2 ring-accent/40" : "bg-surface-muted"
             }`}
           >
@@ -522,8 +522,10 @@ function KanbanColumns({
               </button>
             </h3>
             {cards.length === 0 && <p className="py-6 text-center text-body-sm text-ink-soft">{t("emptyColumn")}</p>}
-            {/* Défile dans la colonne plutôt que d'allonger la page ; le dépôt reste possible sur toute la colonne. */}
-            <ul className="-mx-1 flex max-h-[calc(100dvh-14rem)] min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain px-1 py-1">
+            {/* Défile dans la colonne plutôt que d'allonger la page ; le dépôt reste possible sur toute la colonne.
+                relative : les champs sr-only (position absolue) des cartes cachées restent coupés par la colonne,
+                sinon ils dépassent et allongent la page sous le footer. */}
+            <ul className="relative -mx-1 flex max-h-[calc(100dvh-8rem)] min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain px-1 py-1">
               {cards.map(({ id }) => (
                 <li
                   key={id}
