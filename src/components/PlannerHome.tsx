@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
-import { ReasoningText } from "@/components/ui/ReasoningText";
+import { BiirbouThinking } from "@/components/ui/BiirbouThinking";
 import { Button } from "@/components/ui/Button";
 import { TripInvitations } from "@/components/TripInvitations";
 import { Card } from "@/components/ui/Card";
@@ -107,7 +107,7 @@ export function PlannerHome({ archetypes }: { archetypes: readonly Archetype[] }
                 {t("create.quota", { count: Math.max(0, list.aiQuota.limit - list.aiQuota.used) })}
               </p>
             )}
-            {pending && <ReasoningText phrases={t.raw("create.reasoning") as string[]} />}
+            {pending && <BiirbouThinking phrases={t.raw("create.reasoning") as string[]} />}
             <Button type="submit" disabled={pending} className="w-full gap-2 sm:w-auto">
               <Icon name="sparkles" className="size-4.5" />
               {t("create.submit")}

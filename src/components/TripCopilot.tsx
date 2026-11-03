@@ -13,7 +13,7 @@ import { Card } from "@/components/ui/Card";
 import { FormError } from "@/components/ui/FormError";
 import { Icon } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
-import { ReasoningText } from "@/components/ui/ReasoningText";
+import { BiirbouThinking } from "@/components/ui/BiirbouThinking";
 import { Textarea } from "@/components/ui/Textarea";
 import { countryName } from "@/lib/country";
 import { apiFetch, getSessionSnapshot, parseSessionUser } from "@/client/session";
@@ -423,7 +423,7 @@ export function TripCopilot({
                 {draft.trim()}
               </p>
               <div className="self-start rounded-lg bg-surface-muted px-3 py-2">
-                <ReasoningText phrases={t.raw("chat.reasoning") as string[]} />
+                <BiirbouThinking size="sm" phrases={t.raw("chat.reasoning") as string[]} />
               </div>
             </>
           )}

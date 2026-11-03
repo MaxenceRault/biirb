@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/Badge";
-import { ReasoningText } from "@/components/ui/ReasoningText";
+import { BiirbouThinking } from "@/components/ui/BiirbouThinking";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -606,7 +606,7 @@ function TripHeader({
         </div>
       </div>
 
-      {regenerating && <ReasoningText phrases={t.raw("create.reasoning") as string[]} />}
+      {regenerating && <BiirbouThinking phrases={t.raw("create.reasoning") as string[]} />}
 
       <ul className="flex flex-wrap gap-2">
         <Chip icon="calendar">
@@ -821,6 +821,8 @@ function DayPlanner({
             )
           )}
         </div>
+
+        {regeneratingDay && <BiirbouThinking phrases={t.raw("days.reasoning") as string[]} />}
 
         {dayItems.length === 0 && <p className="text-body-sm text-ink-soft">{t("days.empty")}</p>}
 
