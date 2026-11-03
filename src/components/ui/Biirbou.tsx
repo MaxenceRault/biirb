@@ -21,7 +21,7 @@ const GLANCES = [
 
 const random = (min: number, max: number) => min + Math.random() * (max - min);
 
-// Mascotte de Biirbou : hibou plein, du gris du logo, yeux blancs,
+// Mascotte de Biirbou : hibou plein encre, yeux blancs,
 // bec à l'accent ; partout le même, jamais d'autres couleurs.
 // Décoratif : son nom est toujours écrit à côté. Animations en SVG + Motion, aucune si l'utilisateur les réduit,
 // en pause quand l'onglet n'est pas visible.
@@ -93,7 +93,7 @@ export function Biirbou({ mood = "idle", className = "size-6" }: { mood?: Biirbo
     };
   }, [mood, reduce]);
 
-  const bodyColor = "fill-logo";
+  const bodyColor = "fill-ink";
   const eyeColor = "fill-surface";
   const pupilColor = "fill-ink";
   const lineColor = "stroke-surface";
