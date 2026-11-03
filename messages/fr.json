@@ -588,7 +588,27 @@
       "quotaReached": "Biirbou a fini sa journée : il revient demain. Avec le pass voyage, il peut vous aider plus souvent sur ce voyage.",
       "quotaReachedPass": "Biirbou a fini sa journée : il revient demain !",
       "upgrade": "Pass voyage",
-      "left": "{count, plural, =0 {Biirbou a fini sa journée : il revient demain.} one {Biirbou peut encore vous aider <strong># fois</strong> aujourd'hui.} other {Biirbou peut encore vous aider <strong># fois</strong> aujourd'hui.}}"
+      "left": "{count, plural, =0 {Biirbou a fini sa journée : il revient demain.} one {Biirbou peut encore vous aider <strong># fois</strong> aujourd'hui.} other {Biirbou peut encore vous aider <strong># fois</strong> aujourd'hui.}}",
+      "preview": {
+        "open": "Voir l'avant / après",
+        "title": "Avant / après",
+        "description": "Votre planning si vous acceptez ces propositions. Rien ne change tant que vous n'avez pas accepté.",
+        "day": "Jour {number} · {date}",
+        "before": "Avant",
+        "after": "Après",
+        "empty": "Aucune activité",
+        "kept": "Gardée",
+        "changes": {
+          "added": "Ajoutée",
+          "updated": "Modifiée",
+          "moved": "Déplacée",
+          "removed": "Retirée"
+        },
+        "skipped": "{count, plural, one {Une proposition ne s'appliquera pas : son activité a été gardée ou retirée entre-temps.} other {# propositions ne s'appliqueront pas : leur activité a été gardée ou retirée entre-temps.}}",
+        "back": "Retour",
+        "close": "Fermer",
+        "accept": "{count, plural, one {Accepter la proposition} other {Tout accepter (#)}}"
+      }
     },
     "whatNow": {
       "open": "Que faire maintenant ?",

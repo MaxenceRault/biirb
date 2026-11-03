@@ -738,18 +738,26 @@ async function applySuggestion(
 }
 
 // Historique des changements de Biirbou (trip_plan_change) : photo avant, empreinte après, restauration par « Annuler ».
-// Contenu seulement (jamais les ids) : un planning restauré a de nouveaux ids mais la même empreinte.
+// Empreinte : contenu seulement (jamais les ids ni les liens).
 const PLAN_ITEMS = `coalesce((select json_agg(json_build_object('day', i.day, 'start_time', i.start_time, 'title', i.title,
     'description', i.description, 'category', i.category, 'source_post_id', i.source_post_id, 'color', i.color, 'origin', i.origin)
     order by i.day, i.start_time, i.title, i.description, i.category, i.color, i.source_post_id, i.origin)
   from trip_item i where i.trip_id = $1), '[]'::json)`;
-// Photo : le lieu et l'épingle en plus. Hors de l'empreinte : le lieu ne change qu'avec le titre (déjà dedans) ou par
-// Biirbou ; épingler une activité ne bloque pas l'annulation.
-const PLAN_ITEMS_SNAPSHOT = `coalesce((select json_agg(json_build_object('day', i.day, 'start_time', i.start_time, 'title', i.title,
-    'description', i.description, 'category', i.category, 'source_post_id', i.source_post_id, 'color', i.color, 'origin', i.origin,
-    'place_name', i.place_name, 'pinned', i.pinned)
+// Photo : ids, version, lieu, trajets et épingle en plus (hors de l'empreinte : le lieu ne change qu'avec le titre, déjà
+// dedans, ou par Biirbou ; épingler ne bloque pas l'annulation). Les ids rendent à « Annuler » les mêmes activités.
+const PLAN_ITEMS_SNAPSHOT = `coalesce((select json_agg(json_build_object('id', i.id, 'version', i.version, 'day', i.day,
+    'start_time', i.start_time, 'title', i.title, 'description', i.description, 'category', i.category,
+    'source_post_id', i.source_post_id, 'color', i.color, 'origin', i.origin, 'place_name', i.place_name,
+    'place_query', i.place_query, 'latitude', i.latitude, 'longitude', i.longitude, 'pinned', i.pinned)
     order by i.day, i.start_time, i.title, i.description, i.category, i.color, i.source_post_id, i.origin)
   from trip_item i where i.trip_id = $1), '[]'::json)`;
+// Liens vers les activités (on delete set null) : propositions qui les visent et activités touchées par un imprévu.
+const PLAN_LINKS = `json_build_object(
+  'suggestions', coalesce((select json_agg(json_build_array(s.id, s.target_item_id))
+    from trip_suggestion s where s.trip_id = $1 and s.target_item_id is not null), '[]'::json),
+  'impacts', coalesce((select json_agg(json_build_array(m.id, m.item_id))
+    from trip_message_impact m join trip_message msg on msg.id = m.message_id
+    where msg.trip_id = $1 and m.item_id is not null), '[]'::json))`;
 const PLAN_TASKS = `coalesce((select json_agg(json_build_object('label', t.label, 'detail', t.detail, 'done', t.done) order by t.id)
   from trip_task t where t.trip_id = $1), '[]'::json)`;
 // Empreinte sans « fait » : cocher la checklist ne bloque pas l'annulation d'une re-génération.
@@ -772,7 +780,7 @@ type Queryable = Pick<PoolClient, "query">;
 async function readPlanState(db: Queryable, tripId: number, kind: TripPlanChangeKind): Promise<{ snapshot: unknown; fingerprint: string }> {
   const full = kind === "regenerate";
   const { rows } = await db.query<{ snapshot: unknown; fingerprint: string }>(
-    `select json_build_object('items', ${PLAN_ITEMS_SNAPSHOT}${full ? `, 'tasks', ${PLAN_TASKS}, 'stops', ${PLAN_STOPS}, 'trip', ${PLAN_TRIP}` : ""}) as snapshot,
+    `select json_build_object('items', ${PLAN_ITEMS_SNAPSHOT}, 'links', ${PLAN_LINKS}${full ? `, 'tasks', ${PLAN_TASKS}, 'stops', ${PLAN_STOPS}, 'trip', ${PLAN_TRIP}` : ""}) as snapshot,
        md5(json_build_array(${PLAN_ITEMS}${full ? `, ${PLAN_TASK_LABELS}, ${PLAN_STOPS}, ${PLAN_TRIP_FINGERPRINT}` : ""})::text) as fingerprint`,
     [tripId],
   );
@@ -832,6 +840,61 @@ export async function findUndoablePlanChange(tripId: number): Promise<{ kind: Tr
 }
 
 // "none" : rien à annuler (ou délai passé). "changed" : planning modifié à la main depuis, rien n'est restauré.
+const SNAPSHOT_ITEMS = `select x.* from trip_plan_change c,
+  jsonb_to_recordset(c.snapshot -> 'items')
+    as x (id int, version int, day date, start_time time, title varchar, description varchar, category trip_item_category,
+      source_post_id int, color varchar, origin trip_item_origin, place_name varchar, place_query varchar, latitude float8,
+      longitude float8, pinned boolean)
+  where c.id = $2`;
+const ITEM_FIELDS = "day, start_time, title, description, category, source_post_id, color, origin, place_name, place_query, latitude, longitude";
+// Récit supprimé depuis : l'activité restaurée perd seulement son lien (comme le on delete set null de trip_item).
+// Photo prise avant la provenance, le lieu ou l'épingle : origin absent = activité de Biirbou, sinon null / non gardée.
+const SNAPSHOT_VALUES = `x.day, x.start_time, x.title, x.description, x.category, (select p.id from post p where p.id = x.source_post_id),
+  x.color, coalesce(x.origin, 'ai'), x.place_name, x.place_query, x.latitude, x.longitude`;
+
+// Remet les activités de la photo avec leurs ids : une proposition en attente ou un imprévu qui visait une activité la
+// retrouve. Une activité encore là garde son épingle (choix du voyageur, jamais de Biirbou). Photo sans ids (prise avant
+// ce changement) : activités recréées avec de nouveaux ids, comme avant.
+async function restorePlanItems(client: PoolClient, tripId: number, changeId: number) {
+  await client.query(
+    `delete from trip_item i where i.trip_id = $1 and not exists (select 1 from (${SNAPSHOT_ITEMS}) x where x.id = i.id)`,
+    [tripId, changeId],
+  );
+  await client.query(
+    `update trip_item i set (${ITEM_FIELDS}) = (${SNAPSHOT_VALUES}), version = i.version + 1
+     from (${SNAPSHOT_ITEMS}) x
+     where i.id = x.id and i.trip_id = $1 and (${ITEM_FIELDS.replace(/(\w+)/g, "i.$1")}) is distinct from (${SNAPSHOT_VALUES})`,
+    [tripId, changeId],
+  );
+  // Id jamais réutilisé par l'identité : une activité supprimée garde le sien, libre, et revient sous le même.
+  await client.query(
+    `insert into trip_item (id, trip_id, ${ITEM_FIELDS}, pinned, version) overriding system value
+     select x.id, $1, ${SNAPSHOT_VALUES}, coalesce(x.pinned, false), coalesce(x.version, 0) + 1
+     from (${SNAPSHOT_ITEMS}) x
+     where x.id is not null and not exists (select 1 from trip_item i where i.id = x.id)`,
+    [tripId, changeId],
+  );
+  await client.query(
+    `insert into trip_item (trip_id, ${ITEM_FIELDS}, pinned)
+     select $1, ${SNAPSHOT_VALUES}, coalesce(x.pinned, false) from (${SNAPSHOT_ITEMS}) x where x.id is null`,
+    [tripId, changeId],
+  );
+  const links = (key: string) => `select (e ->> 0)::int as id, (e ->> 1)::int as item_id
+    from trip_plan_change c, jsonb_array_elements(coalesce(c.snapshot -> 'links' -> '${key}', '[]'::jsonb)) e where c.id = $2`;
+  await client.query(
+    `update trip_suggestion s set target_item_id = l.item_id from (${links("suggestions")}) l
+     where s.id = l.id and s.trip_id = $1 and s.target_item_id is null
+       and exists (select 1 from trip_item i where i.id = l.item_id and i.trip_id = $1)`,
+    [tripId, changeId],
+  );
+  await client.query(
+    `update trip_message_impact m set item_id = l.item_id from (${links("impacts")}) l, trip_message msg
+     where m.id = l.id and msg.id = m.message_id and msg.trip_id = $1 and m.item_id is null
+       and exists (select 1 from trip_item i where i.id = l.item_id and i.trip_id = $1)`,
+    [tripId, changeId],
+  );
+}
+
 export async function undoLastPlanChange(tripId: number): Promise<"undone" | "none" | "changed"> {
   const client = await (await getDb()).connect();
   try {
@@ -847,21 +910,7 @@ export async function undoLastPlanChange(tripId: number): Promise<"undone" | "no
       return "changed";
     }
 
-    // Récit supprimé depuis : l'activité restaurée perd seulement son lien (comme le on delete set null de trip_item).
-    await client.query("delete from trip_item where trip_id = $1", [tripId]);
-    // Photo prise avant la provenance, le lieu ou l'épingle : origin absent = activité de Biirbou, place_name absent = null,
-    // pinned absent = non gardée.
-    await client.query(
-      `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, color, origin, place_name, pinned)
-       select $1, x.day, x.start_time, x.title, x.description, x.category, (select p.id from post p where p.id = x.source_post_id), x.color,
-         coalesce(x.origin, 'ai'), x.place_name, coalesce(x.pinned, false)
-       from trip_plan_change c,
-         jsonb_to_recordset(c.snapshot -> 'items')
-           as x (day date, start_time time, title varchar, description varchar, category trip_item_category, source_post_id int, color varchar,
-             origin trip_item_origin, place_name varchar, pinned boolean)
-       where c.id = $2`,
-      [tripId, change.id],
-    );
+    await restorePlanItems(client, tripId, change.id);
     if (change.kind === "regenerate") {
       await client.query("delete from trip_task where trip_id = $1", [tripId]);
       await client.query(
