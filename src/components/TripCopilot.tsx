@@ -55,8 +55,6 @@ type Mutate = (path: string, method: string, body?: unknown) => Promise<boolean>
 export type CopilotAsk = { kind: "chat"; draft?: string } | { kind: "adapt"; day: string };
 export type CopilotRequest = CopilotAsk & { nonce: number };
 
-const CHEER_MS = 1_500;
-
 // Motifs d'imprévus proposés par « Adapter mon voyage » (textes dans messages/fr.json → Planner.copilot.adapt).
 const ADAPT_REASONS = ["rain", "tired", "late", "closed", "budget", "other"] as const;
 
@@ -80,7 +78,7 @@ export function CopilotCard({ detail, onOpen }: { detail: TripDetail; onOpen: (r
     <Card className="flex flex-col gap-4 p-6">
       <div className="flex flex-col gap-1">
         <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
-          <Biirbou className="size-7" />
+          <Biirbou animated={false} className="size-7" />
           {t("copilot.title")}
         </h2>
         <p className="text-body-sm text-ink-soft">{t(`copilot.cardText.${moment.kind}`)}</p>
@@ -106,17 +104,20 @@ export function CopilotCard({ detail, onOpen }: { detail: TripDetail; onOpen: (r
   );
 }
 
-// Bouton flottant : Biirbou depuis tous les onglets du voyage (Planning, Tableau, Dépenses).
+// Bouton flottant : Biirbou depuis tous les onglets du voyage (Planning, Tableau, Dépenses). La mascotte seule, animée ;
+// son nom glisse à côté au survol ou au focus (toujours lu par les lecteurs d'écran).
 export function CopilotLauncher({ onOpen }: { onOpen: () => void }) {
   const t = useTranslations("Planner");
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-full border border-line bg-surface py-2.5 pr-5 pl-3.5 font-display text-label-lg text-ink shadow-lg transition hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none md:right-6 md:bottom-6"
+      className="group fixed right-4 bottom-4 z-40 flex items-center rounded-full font-display text-label-lg text-ink focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none md:right-6 md:bottom-6"
     >
-      <Biirbou className="size-7" />
-      {t("copilot.launcher")}
+      <span className="max-w-0 translate-x-3 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:mr-2 group-hover:max-w-xs group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:mr-2 group-focus-visible:max-w-xs group-focus-visible:translate-x-0 group-focus-visible:opacity-100 motion-reduce:transition-none">
+        {t("copilot.launcher")}
+      </span>
+      <Biirbou className="size-14 drop-shadow-md transition-transform duration-300 ease-out group-hover:-translate-y-0.5 motion-reduce:transition-none" />
     </button>
   );
 }
@@ -156,7 +157,6 @@ export function TripCopilot({
   const [draft, setDraft] = useState("");
   const [adaptDay, setAdaptDay] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [cheering, setCheering] = useState(false);
   const [error, setError] = useState<PlannerError | null>(null);
   const panel = useRef<HTMLElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -262,11 +262,6 @@ export function TripCopilot({
   async function answer(suggestion: TripSuggestion, accepted: boolean) {
     const ok = await mutate(`/suggestions/${suggestion.id}`, "PATCH", { accepted });
     if (!ok) return loadMessages();
-    // Biirbou est content quand une de ses idées entre dans le planning.
-    if (accepted) {
-      setCheering(true);
-      setTimeout(() => setCheering(false), CHEER_MS);
-    }
     const status = accepted ? "accepted" : "rejected";
     setMessages((current) =>
       (current ?? []).map((message) => ({
@@ -289,7 +284,7 @@ export function TripCopilot({
       <div className="flex items-start justify-between gap-3 border-b border-line px-5 pt-5 pb-4">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
-            <Biirbou mood={sending ? "thinking" : cheering ? "happy" : "idle"} className="size-8" />
+            <Biirbou animated={false} className="size-8" />
             {t("copilot.title")}
           </h2>
           <p className="truncate text-label-sm text-ink-soft">{trip.title}</p>

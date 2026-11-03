@@ -25,8 +25,9 @@ const random = (min: number, max: number) => min + Math.random() * (max - min);
 // bec à l'accent ; partout le même, jamais d'autres couleurs.
 // Décoratif : son nom est toujours écrit à côté. Animations en SVG + Motion, aucune si l'utilisateur les réduit,
 // en pause quand l'onglet n'est pas visible.
-export function Biirbou({ mood = "idle", className = "size-6" }: { mood?: BiirbouMood; className?: string }) {
-  const reduce = useReducedMotion() ?? false;
+// animated={false} : immobile (titres) ; seule la mascotte du bouton flottant vit sa vie.
+export function Biirbou({ mood = "idle", animated = true, className = "size-6" }: { mood?: BiirbouMood; animated?: boolean; className?: string }) {
+  const reduce = (useReducedMotion() ?? false) || !animated;
   const [blink, setBlink] = useState(false);
   const [glance, setGlance] = useState({ x: 0, y: 0 });
   const [dozing, setDozing] = useState(false);
