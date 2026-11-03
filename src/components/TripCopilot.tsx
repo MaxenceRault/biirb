@@ -113,7 +113,7 @@ export function CopilotLauncher({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-full bg-ink py-2.5 pr-5 pl-3.5 font-display text-label-lg text-surface shadow-lg transition hover:bg-ink/90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none md:right-6 md:bottom-6"
+      className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-full border border-line bg-surface py-2.5 pr-5 pl-3.5 font-display text-label-lg text-ink shadow-lg transition hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none md:right-6 md:bottom-6"
     >
       <Biirbou className="size-7" />
       {t("copilot.launcher")}
