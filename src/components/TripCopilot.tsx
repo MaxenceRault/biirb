@@ -55,6 +55,8 @@ type Mutate = (path: string, method: string, body?: unknown) => Promise<boolean>
 export type CopilotAsk = { kind: "chat"; draft?: string } | { kind: "adapt"; day: string };
 export type CopilotRequest = CopilotAsk & { nonce: number };
 
+const CHEER_MS = 1_500;
+
 // Motifs d'imprévus proposés par « Adapter mon voyage » (textes dans messages/fr.json → Planner.copilot.adapt).
 const ADAPT_REASONS = ["rain", "tired", "late", "closed", "budget", "other"] as const;
 
@@ -169,6 +171,7 @@ export function TripCopilot({
   const [draft, setDraft] = useState("");
   const [adaptDay, setAdaptDay] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [cheering, setCheering] = useState(false);
   const [error, setError] = useState<PlannerError | null>(null);
   const panel = useRef<HTMLElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -274,6 +277,11 @@ export function TripCopilot({
   async function answer(suggestion: TripSuggestion, accepted: boolean) {
     const ok = await mutate(`/suggestions/${suggestion.id}`, "PATCH", { accepted });
     if (!ok) return loadMessages();
+    // Biirbou est content quand une de ses idées entre dans le planning.
+    if (accepted) {
+      setCheering(true);
+      setTimeout(() => setCheering(false), CHEER_MS);
+    }
     const status = accepted ? "accepted" : "rejected";
     setMessages((current) =>
       (current ?? []).map((message) => ({
@@ -296,7 +304,8 @@ export function TripCopilot({
       <div className="flex items-start justify-between gap-3 border-b border-line px-5 pt-5 pb-4">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
-            <Biirbou animated={false} className="size-8" />
+            {/* Animé dans le panneau (réfléchit pendant la réponse, content quand une idée est acceptée) ; immobile dans le planning. */}
+            <Biirbou mood={sending ? "thinking" : cheering ? "happy" : "idle"} followPointer className="size-8" />
             {t("copilot.title")}
           </h2>
           <p className="truncate text-label-sm text-ink-soft">{trip.title}</p>
