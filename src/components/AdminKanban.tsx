@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { Dialog } from "@/components/ui/Dialog";
 import { FilterBar, FilterChip } from "@/components/ui/FilterChip";
 import { Icon } from "@/components/ui/Icon";
-import { Input } from "@/components/ui/Input";
+import { FIELD_CLASS_NAME, Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { BOARD_COLUMNS, DEV_TICKET_DESCRIPTION_MAX, DEV_TICKET_TITLE_MAX, DEV_TICKET_TITLE_MIN, type BoardColumn } from "@/schemas/dev-ticket.schema";
@@ -242,6 +243,16 @@ function SupportBoard({ call, admins, visible }: BoardProps) {
         );
       }}
       cardLabel={(id) => tickets.find((item) => item.id === id)!.subject}
+      summary={(id) => {
+        const ticket = tickets.find((item) => item.id === id)!;
+        return {
+          title: ticket.subject,
+          text: `${ticket.message} ${ticket.author.username} ${ticket.author.display_name}`,
+          priority: ticket.priority,
+          created_at: ticket.created_at,
+          author: `@${ticket.author.username}`,
+        };
+      }}
     />
   );
 }
@@ -307,6 +318,16 @@ function DevBoard({ call, admins, visible }: BoardProps) {
           items={tickets.filter(visible).map((ticket) => ({ id: ticket.id, column: ticket.status }))}
           onMove={move}
           cardLabel={(id) => tickets.find((item) => item.id === id)!.title}
+          summary={(id) => {
+            const ticket = tickets.find((item) => item.id === id)!;
+            return {
+              title: ticket.title,
+              text: `${ticket.description ?? ""} ${ticket.author?.username ?? ""}`,
+              priority: ticket.priority,
+              created_at: ticket.created_at,
+              author: ticket.author ? `@${ticket.author.username}` : t("deletedAuthor"),
+            };
+          }}
           renderCard={(id) => {
             const ticket = tickets.find((item) => item.id === id)!;
             if (editing === ticket.id) {
@@ -436,15 +457,29 @@ function KanbanColumns({
   onMove,
   renderCard,
   cardLabel,
+  summary,
 }: {
   items: { id: number; column: BoardColumn }[];
   onMove: (id: number, column: BoardColumn) => void;
   renderCard: (id: number) => ReactNode;
   cardLabel: (id: number) => string;
+  // Ce que la fenêtre d'une colonne affiche et cherche.
+  summary: (id: number) => TicketSummary;
 }) {
   const t = useTranslations("Admin.kanban");
   const [dragged, setDragged] = useState<number | null>(null);
   const [over, setOver] = useState<BoardColumn | null>(null);
+  const [opened, setOpened] = useState<BoardColumn | null>(null);
+
+  // Ticket choisi dans la fenêtre : la carte est amenée à l'écran et sélectionnée (flèches ← → pour la déplacer).
+  function reveal(id: number) {
+    setOpened(null);
+    requestAnimationFrame(() => {
+      const card = document.getElementById(`kanban-card-${id}`);
+      card?.scrollIntoView({ block: "center", behavior: "smooth" });
+      card?.focus({ preventScroll: true });
+    });
+  }
 
   function drop(event: DragEvent<HTMLElement>, column: BoardColumn) {
     event.preventDefault();
@@ -472,15 +507,27 @@ function KanbanColumns({
               over === column ? "bg-accent/10 ring-2 ring-accent/40" : "bg-surface-muted"
             }`}
           >
-            <h3 id={`kanban-${column}`} className="flex items-center justify-between font-display text-label-lg text-ink">
-              {t(`columns.${column}`)}
-              <span className="rounded-full bg-surface px-2 py-0.5 text-label-sm text-ink-soft">{cards.length}</span>
+            <h3 id={`kanban-${column}`} className="font-display text-label-lg text-ink">
+              <button
+                type="button"
+                onClick={() => setOpened(column)}
+                title={t("columnOpen", { column: t(`columns.${column}`) })}
+                className="-mx-1 flex w-[calc(100%+0.5rem)] items-center justify-between gap-2 rounded-lg px-1 py-0.5 text-left transition hover:bg-surface focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none"
+              >
+                <span className="flex items-center gap-1.5">
+                  {t(`columns.${column}`)}
+                  <Icon name="search" className="size-3.5 text-ink-soft" />
+                </span>
+                <span className="rounded-full bg-surface px-2 py-0.5 text-label-sm text-ink-soft">{cards.length}</span>
+              </button>
             </h3>
             {cards.length === 0 && <p className="py-6 text-center text-body-sm text-ink-soft">{t("emptyColumn")}</p>}
-            <ul className="flex flex-col gap-2">
+            {/* Défile dans la colonne plutôt que d'allonger la page ; le dépôt reste possible sur toute la colonne. */}
+            <ul className="-mx-1 flex max-h-[calc(100dvh-14rem)] min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain px-1 py-1">
               {cards.map(({ id }) => (
                 <li
                   key={id}
+                  id={`kanban-card-${id}`}
                   // Clavier : la carte sélectionnée change de colonne avec ← et →.
                   tabIndex={0}
                   aria-label={t("cardLabel", { title: cardLabel(id), column: t(`columns.${column}`) })}
@@ -512,7 +559,143 @@ function KanbanColumns({
           </section>
         );
       })}
+      {opened && (
+        <ColumnDialog
+          column={opened}
+          tickets={items.filter((item) => item.column === opened).map(({ id }) => ({ id, ...summary(id) }))}
+          onClose={() => setOpened(null)}
+          onSelect={reveal}
+        />
+      )}
     </div>
+  );
+}
+
+type TicketSummary = { title: string; text: string; priority: TicketPriority; created_at: string; author: string };
+
+const PERIODS = ["all", "7", "30", "90"] as const;
+type Period = (typeof PERIODS)[number];
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Recherche sans tenir compte des accents ni de la casse.
+const normalize = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+
+// Tous les tickets d'une colonne (sans les filtres du tableau) : recherche texte, priorité, période et tri par date.
+function ColumnDialog({
+  column,
+  tickets,
+  onClose,
+  onSelect,
+}: {
+  column: BoardColumn;
+  tickets: ({ id: number } & TicketSummary)[];
+  onClose: () => void;
+  onSelect: (id: number) => void;
+}) {
+  const t = useTranslations("Admin.kanban");
+  const format = useFormatter();
+  const [query, setQuery] = useState("");
+  const [priorities, setPriorities] = useState<TicketPriority[]>([]);
+  const [period, setPeriod] = useState<Period>("all");
+  const [order, setOrder] = useState<"newest" | "oldest">("newest");
+  // Figée à l'ouverture : la période ne glisse pas pendant la recherche.
+  const [now] = useState(() => Date.now());
+
+  const words = normalize(query).split(/\s+/).filter(Boolean);
+  const results = tickets
+    .filter((ticket) => {
+      const haystack = normalize(`#${ticket.id} ${ticket.title} ${ticket.text}`);
+      if (!words.every((word) => haystack.includes(word))) return false;
+      if (priorities.length > 0 && !priorities.includes(ticket.priority)) return false;
+      return period === "all" || now - Date.parse(ticket.created_at) <= Number(period) * DAY_MS;
+    })
+    .sort((a, b) => (order === "newest" ? 1 : -1) * (Date.parse(b.created_at) - Date.parse(a.created_at)));
+
+  function togglePriority(priority: TicketPriority) {
+    setPriorities((current) => (current.includes(priority) ? current.filter((value) => value !== priority) : [...current, priority]));
+  }
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      size="lg"
+      title={t("columnDialog.title", { column: t(`columns.${column}`), count: tickets.length })}
+      closeLabel={t("columnDialog.close")}
+    >
+      <div className="flex flex-col gap-3">
+        <label htmlFor="kanban-search" className="sr-only">
+          {t("columnDialog.search")}
+        </label>
+        <Input
+          id="kanban-search"
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+          placeholder={t("columnDialog.searchPlaceholder")}
+          autoFocus
+        />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <FilterBar label={t("priorityLabel")}>
+            {TICKET_PRIORITIES.map((priority) => (
+              <FilterChip key={priority} active={priorities.includes(priority)} onClick={() => togglePriority(priority)}>
+                {t(`priorities.${priority}`)}
+              </FilterChip>
+            ))}
+          </FilterBar>
+          <div className="flex items-center gap-2">
+            <label htmlFor="kanban-period" className="text-label-md text-ink-soft">
+              {t("columnDialog.period")}
+            </label>
+            <select
+              id="kanban-period"
+              value={period}
+              onChange={(event) => setPeriod(event.currentTarget.value as Period)}
+              className={`h-9 py-0 ${FIELD_CLASS_NAME}`}
+            >
+              {PERIODS.map((value) => (
+                <option key={value} value={value}>
+                  {t(`columnDialog.periods.${value}`)}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setOrder((value) => (value === "newest" ? "oldest" : "newest"))}
+              className="flex items-center gap-1 rounded-full px-2 py-1 font-display text-label-sm text-accent transition hover:bg-accent/10 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none"
+            >
+              <Icon name="arrowUp" className={`size-3.5 transition ${order === "newest" ? "rotate-180" : ""}`} />
+              {t(`columnDialog.order.${order}`)}
+            </button>
+          </div>
+        </div>
+
+        <p aria-live="polite" className="text-label-sm text-ink-soft">
+          {t("columnDialog.results", { count: results.length })}
+        </p>
+        <ul className="flex max-h-[55dvh] flex-col gap-1.5 overflow-y-auto overscroll-contain">
+          {results.map((ticket) => (
+            <li key={ticket.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(ticket.id)}
+                className="flex w-full flex-col gap-1 rounded-lg bg-surface-muted px-3 py-2.5 text-left transition hover:bg-accent/10 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none"
+              >
+                <span className="flex items-start justify-between gap-3">
+                  <span className="font-display text-label-lg text-ink">{ticket.title}</span>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 font-display text-label-sm ${PRIORITY_TONES[ticket.priority]}`}>
+                    {t(`priorities.${ticket.priority}`)}
+                  </span>
+                </span>
+                <span className="text-label-sm text-ink-soft">
+                  #{ticket.id} · {ticket.author} · {format.dateTime(new Date(ticket.created_at), { dateStyle: "medium" })}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Dialog>
   );
 }
 
