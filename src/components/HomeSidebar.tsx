@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { CreateTripLink } from "@/components/CreateTripLink";
 import { FeedFilterLink } from "@/components/FeedFilterLink";
 import { HomeArchetypeMore } from "@/components/HomeArchetypeMore";
 import { buttonClassName } from "@/components/ui/Button";
@@ -33,8 +34,8 @@ const VISIBLE_ARCHETYPES = 8;
 export function HomeArchetypeNav({ archetypes, active }: { archetypes: Archetype[]; active: string | null | undefined }) {
   const t = useTranslations("Home");
   const links = [
-    { key: "all", label: t("allArchetypes"), href: "/", isActive: active === undefined },
-    ...archetypes.map(({ slug, label }) => ({ key: slug, label, href: `/?archetype=${slug}`, isActive: active === slug })),
+    { key: "all", label: t("allArchetypes"), href: "/explore", isActive: active === undefined },
+    ...archetypes.map(({ slug, label }) => ({ key: slug, label, href: `/explore?archetype=${slug}`, isActive: active === slug })),
   ];
   const visible = links.slice(0, VISIBLE_ARCHETYPES + 1);
   const more = links.slice(VISIBLE_ARCHETYPES + 1);
@@ -103,9 +104,9 @@ export function PlannerInvite() {
       <Icon name="sparkles" className="size-6 text-accent" />
       <h2 className="font-display text-headline-sm text-ink">{t("plannerTitle")}</h2>
       <p className="text-body-md text-ink-soft">{t("plannerText")}</p>
-      <Link href="/planner" className={buttonClassName("sm", "w-full")}>
+      <CreateTripLink placement="sidebar" className={buttonClassName("sm", "w-full")}>
         {t("plannerCta")}
-      </Link>
+      </CreateTripLink>
     </Card>
   );
 }

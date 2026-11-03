@@ -4,7 +4,8 @@ import { getPostSlug } from "@/server/services/post.service";
 import { postIdSchema } from "@/schemas/post.schema";
 
 // 1. Anciens liens /post/{id} : redirection 308 avant le rendu (depuis la page, rendue en streaming, ce serait 200).
-// 2. Routes API privées : refus immédiat sans token valide (chaque controller revérifie aussi).
+// 2. Anciens liens du feed sur l'accueil (/?q=, /?archetype=) : redirection 308 vers la page Explorer, mêmes paramètres.
+// 3. Routes API privées : refus immédiat sans token valide (chaque controller revérifie aussi).
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -14,6 +15,8 @@ export async function proxy(request: NextRequest) {
     // Sans révéler l'existence d'un post masqué.
     return slug ? NextResponse.redirect(new URL(`/post/${slug}`, request.url), 308) : NextResponse.next();
   }
+
+  if (pathname === "/") return NextResponse.redirect(new URL(`/explore${request.nextUrl.search}`, request.url), 308);
 
   // Le feed (GET /api/v1/posts) est public.
   if (request.method === "GET" && pathname === "/api/v1/posts") return NextResponse.next();
@@ -32,6 +35,9 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/post/:id(\\d+)",
+    // Seulement avec ces paramètres : l'accueil sans paramètre ne passe pas par le proxy.
+    { source: "/", has: [{ type: "query", key: "q" }] },
+    { source: "/", has: [{ type: "query", key: "archetype" }] },
     // Les pages ne reçoivent pas le token (navigateur, pas de cookie).
     "/api/v1/users/:path*",
     "/api/v1/posts/:path*",

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -15,7 +15,7 @@ import type { TripRole } from "@/components/TripSharePanel";
 
 export type TripPass = { active: boolean; available: boolean; priceEur: number | null };
 
-const BENEFITS = ["ai", "day", "exports"] as const;
+const BENEFITS = ["ai", "travel", "day", "exports"] as const;
 
 // Pourquoi la fenêtre s'ouvre : une fonction du pass touchée, une limite atteinte, ou « info » (carte de la colonne).
 export type TripPassFeature = "info" | "pdf" | "calendar" | "day" | "maps" | "ai" | "chat";
@@ -48,6 +48,11 @@ export function TripPassCard({ pass, onOpen }: { pass: TripPass; onOpen: () => v
 // Fenêtre du pass : avantages, prix, puis achat sur Buy Me a Coffee.
 export function TripPassDialog({ feature, onClose, ...props }: OfferProps & { feature: TripPassFeature | null; onClose: () => void }) {
   const t = useTranslations("Planner");
+
+  // Offre consultée (mesure d'audience) : ce qui l'a ouverte, jamais le voyage.
+  useEffect(() => {
+    if (feature) trackEvent("trip_pass_viewed", { source: feature });
+  }, [feature]);
 
   // Pass activé après le paiement : la fenêtre se ferme.
   async function refreshAndClose() {
@@ -128,6 +133,7 @@ function TripPassOffer({ tripId, pass, role, feature, onRefresh }: OfferProps & 
           </li>
         ))}
       </ul>
+      <p className="text-body-sm text-ink-soft">{t("pass.terms")}</p>
 
       {!pass.available || price === null ? (
         <div className="flex flex-col gap-2">

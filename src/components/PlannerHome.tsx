@@ -35,11 +35,13 @@ export function PlannerHome({ archetypes }: { archetypes: readonly Archetype[] }
 
   // Confort uniquement : la vraie protection est la vérification du JWT par l'API.
   useEffect(() => {
-    if (!getSessionSnapshot()) return router.replace("/login");
+    // Retour ici après la connexion ou l'inscription.
+    const login = `/login?${new URLSearchParams({ next: "/planner" })}`;
+    if (!getSessionSnapshot()) return router.replace(login);
 
     apiFetch<{ trips: TripSummary[]; aiQuota: AiQuota }>("/api/v1/trips").then((result) => {
       if ("data" in result) return setList({ status: "ready", ...result.data });
-      if (result.error === "UNAUTHORIZED") return router.replace("/login");
+      if (result.error === "UNAUTHORIZED") return router.replace(login);
       setList({ status: "error" });
     });
   }, [router]);

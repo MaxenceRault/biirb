@@ -47,7 +47,7 @@ async function SearchForm() {
   const t = await getTranslations("Navbar");
 
   return (
-    <form role="search" action="/" method="get">
+    <form role="search" action="/explore" method="get">
       <div className="flex items-center rounded-lg border border-transparent bg-surface-muted p-1.5 transition focus-within:border-accent focus-within:bg-surface">
         <Icon name="search" className="ml-2 size-4.5 shrink-0 text-ink-soft" />
         <input

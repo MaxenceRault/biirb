@@ -1,14 +1,22 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useEffect, useState, type ReactNode } from "react";
 
 const INTERVAL_MS = 5000;
 
-// Bannière de l'accueil : couvertures de récits en fondu enchaîné, slogan au centre.
-export function HomeHero({ photos }: { photos: { slug: string; photo_url: string }[] }) {
-  const t = useTranslations("Home");
+// Bannière de l'accueil : couvertures de récits en fondu enchaîné derrière l'accroche (rendue par le serveur).
+export function HomeHero({
+  id,
+  photos,
+  label,
+  children,
+}: {
+  id: string;
+  photos: { slug: string; photo_url: string }[];
+  label: string;
+  children: ReactNode;
+}) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -20,8 +28,9 @@ export function HomeHero({ photos }: { photos: { slug: string; photo_url: string
 
   return (
     <section
-      aria-label={t("heroLabel")}
-      className="relative isolate flex h-64 items-center justify-center overflow-hidden rounded-lg bg-ink md:h-96"
+      id={id}
+      aria-label={label}
+      className="relative isolate flex min-h-80 scroll-mt-24 items-center justify-center overflow-hidden rounded-lg bg-ink px-5 py-10 md:px-10 md:py-14"
     >
       {photos.map((photo, position) => (
         <Image
@@ -34,13 +43,9 @@ export function HomeHero({ photos }: { photos: { slug: string; photo_url: string
           className={`-z-10 object-cover transition-opacity duration-1000 ${position === index ? "opacity-100" : "opacity-0"}`}
         />
       ))}
-      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-ink/45" />
-
-      <div className="flex flex-col items-center gap-2 px-6 text-center text-surface">
-        <p className="font-display text-display-lg-mobile md:text-display-lg">{t("heroBrand")}</p>
-        <p className="font-display text-headline-sm text-balance md:text-headline-md">{t("heroTagline")}</p>
-        <p className="max-w-xl text-body-md text-balance text-surface/90">{t("heroCopilot")}</p>
-      </div>
+      {/* Plus sombre en bas : les boutons restent lisibles sur toutes les photos. */}
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-linear-to-b from-ink/45 via-ink/50 to-ink/75" />
+      {children}
     </section>
   );
 }

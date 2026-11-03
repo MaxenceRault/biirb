@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 
 type ButtonSize = "md" | "sm";
-type ButtonVariant = "primary" | "secondary" | "danger";
+type ButtonVariant = "primary" | "secondary" | "danger" | "inverse";
 
 const SIZES: Record<ButtonSize, string> = {
   md: "h-12 px-4 text-label-lg md:h-11",
@@ -12,6 +12,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
   primary: "bg-accent text-on-accent hover:opacity-92",
   secondary: "border border-line bg-surface-muted text-ink hover:bg-surface",
   danger: "bg-error text-on-accent hover:opacity-92",
+  // Sur un fond sombre ou une photo (bandeau de l'accueil).
+  inverse: "border border-surface/40 bg-surface/10 text-surface backdrop-blur-sm hover:bg-surface/20",
 };
 
 // Exportées pour styler un <Link> comme un bouton.

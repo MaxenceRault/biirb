@@ -13,6 +13,11 @@ export function aiDailyLimitPerUser() {
   return getConfig().aiDailyLimitPerUser;
 }
 
+// Sur un voyage avec pass (AI_DAILY_LIMIT_TRIP_PASS), jamais moins que sans.
+export function aiDailyLimitWithTripPass() {
+  return Math.max(getConfig().aiDailyLimitTripPass, aiDailyLimitPerUser());
+}
+
 export class AiQuotaError extends Error {
   constructor(
     // AI_DISABLED : IA coupée ou plafond global atteint.
@@ -33,8 +38,7 @@ export async function consumeAiCall(userId: string, { tripPass = false }: { trip
     throw new AiQuotaError("AI_DISABLED");
   }
 
-  const { aiDailyLimitTripPass } = getConfig();
-  const limit = access.role === "admin" ? null : tripPass ? Math.max(aiDailyLimitTripPass, aiDailyLimitPerUser()) : aiDailyLimitPerUser();
+  const limit = access.role === "admin" ? null : tripPass ? aiDailyLimitWithTripPass() : aiDailyLimitPerUser();
   if (!(await incrementAiUsage(userId, limit))) throw new AiQuotaError("DAILY_LIMIT_REACHED");
 }
 
@@ -42,5 +46,5 @@ export async function consumeAiCall(userId: string, { tripPass = false }: { trip
 export async function getAiQuota(userId: string, { tripPass = false }: { tripPass?: boolean } = {}): Promise<{ used: number; limit: number | null }> {
   const [access, used] = await Promise.all([findUserAccess(userId), countUserAiCallsToday(userId)]);
   if (access?.role === "admin") return { used, limit: null };
-  return { used, limit: tripPass ? Math.max(getConfig().aiDailyLimitTripPass, aiDailyLimitPerUser()) : aiDailyLimitPerUser() };
+  return { used, limit: tripPass ? aiDailyLimitWithTripPass() : aiDailyLimitPerUser() };
 }

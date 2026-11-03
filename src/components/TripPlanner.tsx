@@ -196,6 +196,8 @@ export function TripPlanner({ tripId }: { tripId: string }) {
   // Compteur d'écritures : une relecture lancée avant ou pendant une modification ne doit pas écraser son résultat.
   const writes = useRef(0);
   const [sharing, setSharing] = useState(false);
+  // Pass tout juste activé : invitation à faire venir les compagnons (ils en profitent sans payer).
+  const [passWelcome, setPassWelcome] = useState(false);
   const [view, setView] = useState<"plan" | "table" | "expenses">("plan");
   const [passFeature, setPassFeature] = useState<TripPassFeature | null>(null);
   const [copilotOpen, setCopilotOpen] = useState(false);
@@ -244,7 +246,12 @@ export function TripPlanner({ tripId }: { tripId: string }) {
 
   // Après le paiement : true si le pass est maintenant actif.
   async function reloadPass() {
-    return (await reloadTrip())?.pass.active ?? false;
+    const active = (await reloadTrip())?.pass.active ?? false;
+    if (active) {
+      setPassWelcome(true);
+      setSharing(true);
+    }
+    return active;
   }
 
   // Voyage partagé : les changements des autres membres apparaissent sans recharger la page. Échec silencieux.
@@ -405,6 +412,14 @@ export function TripPlanner({ tripId }: { tripId: string }) {
         <p role="status" className="flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-body-sm text-surface">
           <Icon name="visibilityOff" className="size-4.5 shrink-0" />
           {t("offline")}
+        </p>
+      )}
+
+      {passWelcome && (
+        <p role="status" className="flex items-center gap-2 rounded-lg bg-accent/10 px-4 py-3 text-body-sm text-ink">
+          <Icon name="sparkles" className="size-4.5 shrink-0 text-accent" />
+          <span className="flex-1">{t("pass.welcome")}</span>
+          <IconButton icon="close" label={t("pass.welcomeClose")} onClick={() => setPassWelcome(false)} />
         </p>
       )}
 

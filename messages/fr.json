@@ -4,7 +4,7 @@
   },
   "Metadata": {
     "title": "Biirb",
-    "description": "Biirb, votre copilote de voyage : un planning tiré des récits de la communauté, que Biirbou adapte avec vous avant et pendant le voyage."
+    "description": "Biirb, ton compagnon de voyage : inspire-toi des récits de voyageurs, prépare ton itinéraire gratuitement et profite du voyage avec Biirbou, ton copilote."
   },
   "Navbar": {
     "brand": "Biirb",
@@ -43,10 +43,175 @@
     "searchCount": "{count, plural, =0 {Aucun récit trouvé} one {# récit trouvé} other {# récits trouvés}}",
     "searchEmpty": "Aucun récit ne correspond à votre recherche. Essayez un pays, une ville ou un autre mot.",
     "searchClear": "Effacer la recherche",
-    "heroLabel": "Bienvenue sur Biirb",
-    "heroBrand": "Biirb.",
-    "heroTagline": "Un coup d'ailes sur un coup de cœur.",
-    "heroCopilot": "Planifiez à partir des récits des voyageurs, puis laissez Biirbou adapter votre voyage en route."
+    "metaTitle": "Explorer les récits",
+    "metaDescription": "Tous les récits de voyage de la communauté Biirb : filtre par envie, cherche une destination et trouve l'inspiration pour ton prochain voyage."
+  },
+  "Landing": {
+    "hero": {
+      "label": "Bienvenue sur Biirb",
+      "eyebrow": "Ton compagnon de voyage",
+      "title": "Ton voyage est prêt ou pas, Biirb t'accompagne jusqu'au retour.",
+      "subtitle": "Inspire-toi des récits, crée ton itinéraire et profite de ton voyage avec ton copilote.",
+      "free": "Gratuit, sans carte bancaire.",
+      "importSoon": "Bientôt : importe ton itinéraire déjà prêt (PDF, Excel, texte…)"
+    },
+    "angles": {
+      "change": {
+        "title": "Le programme change ? Biirbou t'accompagne pendant ton voyage.",
+        "subtitle": "Pluie, fatigue, retard, lieu fermé : dis-lui ce qui se passe, il réorganise ta journée et tu valides."
+      },
+      "group": {
+        "title": "Un seul pass voyage pour toute la bande.",
+        "subtitle": "Prépare le voyage gratuitement, invite tes compagnons : un seul achat débloque Biirbou en grand pour tout le groupe."
+      }
+    },
+    "cta": {
+      "create": "Créer mon voyage gratuitement",
+      "explore": "Explorer les récits"
+    },
+    "inspiration": {
+      "eyebrow": "S'inspirer",
+      "title": "Pars sur les traces de ceux qui y sont allés",
+      "text": "Des récits vrais, écrits par des voyageurs. Biirbou s'en sert pour composer ton planning.",
+      "destinations": "Destinations tendance",
+      "archetypes": "Explorer par envie",
+      "postCount": "{count, plural, one {# récit} other {# récits}}",
+      "explore": "Découvrir tous les récits",
+      "allArchetypes": "{count, plural, one {# autre envie} other {Toutes les envies (+#)}}",
+      "recent": "Récits récents",
+      "carousel": {
+        "role": "carrousel",
+        "label": "Récits récents de la communauté",
+        "slide": "récit",
+        "position": "{index} sur {total}",
+        "by": "par {author}",
+        "prev": "Récits précédents",
+        "next": "Récits suivants"
+      }
+    },
+    "planning": {
+      "eyebrow": "Préparer · gratuit",
+      "title": "Ton planning en quelques minutes, sans payer",
+      "text": "Crée un compte, choisis ta destination : Biirbou s'occupe du reste, et tu gardes la main sur tout.",
+      "steps": {
+        "where": {
+          "title": "Choisis où et quand",
+          "text": "Jusqu'à {destinations} étapes et {months} mois de voyage, seul ou jusqu'à {travelers} voyageurs."
+        },
+        "compose": {
+          "title": "Biirbou compose ton planning",
+          "text": "Jour par jour, à partir des récits de la communauté, de la saison et de tes envies."
+        },
+        "adjust": {
+          "title": "Ajuste tout comme tu veux",
+          "text": "Ajoute, modifie ou supprime une activité, coche ta checklist, invite tes compagnons et partage les dépenses."
+        }
+      },
+      "cta": "Créer mon voyage gratuitement"
+    },
+    "copilot": {
+      "eyebrow": "Vivre le voyage",
+      "title": "Biirbou, ton copilote jusqu'au retour",
+      "text": "Le planning n'est pas figé : quand le programme change, Biirbou s'adapte avec toi.",
+      "features": {
+        "adapt": {
+          "title": "Adapter ma journée",
+          "text": "Pluie, fatigue, retard, lieu fermé : il réorganise la journée autour de ce que tu lui dis."
+        },
+        "now": {
+          "title": "Que faire maintenant ?",
+          "text": "Une idée pour le temps libre qui reste, selon ton énergie et l'endroit où tu es, si tu choisis de le partager."
+        },
+        "edit": {
+          "title": "Une alternative en un message",
+          "text": "Demande-lui de changer une activité : tu acceptes ou refuses chaque proposition, et tu peux annuler."
+        },
+        "memory": {
+          "title": "Il se souvient de l'essentiel",
+          "text": "Allergie, rythme, mobilité : Biirbou garde en tête ce qui compte, pour tout le voyage."
+        },
+        "group": {
+          "title": "Décidez ensemble",
+          "text": "Un planning partagé, à jour pour toute la bande : chacun voit les changements et les propositions de Biirbou."
+        },
+        "budget": {
+          "title": "Le budget sous contrôle",
+          "text": "Biirbou connaît le budget prévu et dépensé ; les dépenses partagées font les comptes, même en plusieurs devises."
+        }
+      },
+      "honest": "Biirbou ne lit ni la météo ni le trafic en direct : tu lui dis ce qui change, il s'occupe du reste.",
+      "demo": {
+        "name": "Biirbou",
+        "question": "Il pleut des cordes, on fait quoi cet après-midi ?",
+        "answer": "Je te propose de remplacer la balade dans le parc par le musée du quartier, à l'abri et juste à côté.",
+        "proposal": "Remplacer « Balade dans le parc » par « Visite du musée »",
+        "accept": "Accepter",
+        "refuse": "Refuser",
+        "caption": "Exemple d'échange avec Biirbou pendant un voyage"
+      }
+    },
+    "pass": {
+      "eyebrow": "Pass voyage",
+      "title": "Un voyage, un pass, toute la bande en profite.",
+      "text": "Le planificateur reste gratuit. Quand le départ approche, le pass donne à Biirbou et aux outils du séjour toute leur puissance, pour tout le groupe.",
+      "free": {
+        "title": "Gratuit",
+        "subtitle": "Pour découvrir et préparer",
+        "items": {
+          "stories": "Lire tous les récits, même sans compte",
+          "generate": "Générer ton voyage et modifier ton planning",
+          "share": "Inviter tes compagnons (jusqu'à {max} voyageurs)",
+          "expenses": "Partager les dépenses du groupe",
+          "ai": "{count, plural, one {Biirbou # fois par jour} other {Biirbou # fois par jour}}"
+        }
+      },
+      "premium": {
+        "title": "Pass voyage",
+        "perTrip": "par voyage",
+        "soon": "Bientôt disponible",
+        "items": {
+          "ai": "Biirbou jusqu'à {count} fois par jour sur ce voyage, et une discussion 4 fois plus longue",
+          "travel": "Temps de trajet à pied et en voiture entre les activités",
+          "day": "Re-générer un seul jour sans toucher au reste",
+          "exports": "Export PDF, calendrier (.ics) et itinéraire Google Maps de chaque jour"
+        },
+        "terms": {
+          "group": "Un seul achat : chaque membre invité en profite, sans payer",
+          "once": "Paiement unique, aucun abonnement",
+          "forever": "Valable pour toujours sur ce voyage"
+        }
+      },
+      "cta": "Créer mon voyage gratuitement",
+      "how": "Tu l'achètes depuis ton voyage, seulement si tu en as besoin."
+    },
+    "final": {
+      "title": "Inspire-toi, prépare, profite : Biirb t'accompagne jusqu'au retour.",
+      "steps": {
+        "inspire": {
+          "title": "S'inspirer",
+          "text": "Les récits et les destinations tendance de la communauté."
+        },
+        "prepare": {
+          "title": "Préparer",
+          "text": "Un planning gratuit, composé par Biirbou et modifiable à volonté."
+        },
+        "live": {
+          "title": "Vivre",
+          "text": "Biirbou, le partage et les dépenses du groupe pendant le séjour."
+        }
+      },
+      "cta": "Créer mon voyage gratuitement",
+      "explore": "Explorer les récits"
+    },
+    "dots": {
+      "label": "Blocs de la page",
+      "hero": "Bienvenue",
+      "inspiration": "S'inspirer",
+      "planning": "Préparer gratuitement",
+      "copilot": "Biirbou, ton copilote",
+      "pass": "Pass voyage",
+      "final": "C'est parti"
+    }
   },
   "CurrentTrip": {
     "during": "En voyage · jour {day} sur {total}",
@@ -67,9 +232,9 @@
     "plan": "Planifier un voyage",
     "trendingTitle": "Destinations tendance",
     "postCount": "{count, plural, one {# récit} other {# récits}}",
-    "plannerTitle": "Votre copilote de voyage",
-    "plannerText": "Biirbou compose votre planning à partir des récits de la communauté, puis l'adapte avec vous pendant le voyage : pluie, fatigue, retard ou lieu fermé.",
-    "plannerCta": "Partir avec Biirbou"
+    "plannerTitle": "Ton voyage, gratuitement",
+    "plannerText": "Biirbou compose ton planning à partir des récits de la communauté, puis t'accompagne pendant le voyage.",
+    "plannerCta": "Créer mon voyage gratuitement"
   },
   "Profile": {
     "metaTitle": "Mon profil",
@@ -240,7 +405,7 @@
     },
     "register": {
       "title": "Créer un compte",
-      "subtitle": "Rejoignez la communauté pour partager vos voyages et planifier les prochains.",
+      "subtitle": "Gratuit : planifiez votre voyage avec Biirbou, invitez vos compagnons et partagez vos récits.",
       "submit": "Créer mon compte",
       "switchPrompt": "Déjà un compte ?",
       "switchLink": "Se connecter",
@@ -664,6 +829,7 @@
       "hint": "Débloquez les outils premium de ce voyage, pour tous ses membres. Un seul paiement, valable pour toujours sur ce voyage.",
       "benefits": {
         "ai": "Biirbou vous aide bien plus souvent chaque jour sur ce voyage, et la discussion est 4 fois plus longue",
+        "travel": "Temps de trajet à pied et en voiture entre les activités",
         "day": "Re-générer un seul jour sans toucher au reste du planning",
         "exports": "Export PDF, calendrier (.ics) et itinéraire Google Maps de chaque jour"
       },
@@ -686,7 +852,10 @@
       "paying": "La page de paiement s'est ouverte dans un nouvel onglet. Payez avec {email} : le pass s'active quelques instants après.",
       "payingUnknown": "La page de paiement s'est ouverte dans un nouvel onglet. Payez avec l'adresse de votre compte Biirb : le pass s'active quelques instants après.",
       "reopenPayment": "Rouvrir la page de paiement",
-      "soon": "Bientôt disponible"
+      "soon": "Bientôt disponible",
+      "terms": "Paiement unique, aucun abonnement. Un seul achat pour ce voyage : chaque membre invité en profite sans payer à son tour.",
+      "welcome": "Pass voyage activé ! Invitez vos compagnons : ils en profitent aussitôt, sans rien payer.",
+      "welcomeClose": "Fermer"
     },
     "export": {
       "csv": "CSV",
