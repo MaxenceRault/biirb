@@ -267,6 +267,31 @@ const tripMessages = {
             type: "array",
             items: { type: "object", properties: { status: { type: "string", enum: ["pending", "accepted", "rejected"] } } },
           },
+          disruption: {
+            type: "object",
+            nullable: true,
+            description:
+              "Réponse de Biirbou : imprévu repéré (null : aucun), revérifié par le serveur. impacted : activités touchées " +
+              "telles qu'elles étaient (item_id null : supprimée depuis).",
+            properties: {
+              summary: { type: "string" },
+              duration: { type: "string", nullable: true },
+              days: { type: "array", items: { type: "string", format: "date" } },
+              impacted: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    item_id: { type: "integer", nullable: true },
+                    day: { type: "string", format: "date" },
+                    start_time: { type: "string" },
+                    title: { type: "string" },
+                    reason: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -629,7 +654,9 @@ export function buildOpenApiDocument() {
         },
       },
       "/trips/{id}": {
-        get: tripRoute("Détail d'un voyage", {}),
+        get: tripRoute("Détail d'un voyage", {
+          description: "impacts : activités touchées par le dernier imprévu repéré par Biirbou (moins de 24 h), avec la raison.",
+        }),
         patch: tripRoute("Modifier le titre, le budget ou la mémoire de Biirbou", {
           body: updateTripSchema,
           versioned: true,

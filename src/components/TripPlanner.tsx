@@ -118,6 +118,8 @@ export type TripDetail = {
   map: TripMapData;
   // Dernier changement de Biirbou encore annulable (null : rien, délai passé, planning modifié depuis, ou lecteur).
   undo: { kind: TripPlanChangeKind; created_at: string } | null;
+  // Activités touchées par le dernier imprévu repéré par Biirbou (moins de 24 h), avec la raison.
+  impacts: { item_id: number; reason: string }[];
   // Voyage en cours, jour local à la destination (null : avant, après, ou lecteur).
   live: { day: string; dayNumber: number } | null;
   // Total dépensé (unités mineures de la devise du voyage), pour le copilote.
@@ -451,6 +453,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
               canEdit={canEdit}
               passActive={pass.active}
               mapsUrls={mapsUrls}
+              impacts={state.data.impacts}
               onLocked={setPassFeature}
               onAsk={openCopilot}
               onBusyChange={setDayBusy}
@@ -779,6 +782,7 @@ function DayPlanner({
   canEdit,
   passActive,
   mapsUrls,
+  impacts,
   onLocked,
   onAsk,
   onBusyChange,
@@ -790,6 +794,7 @@ function DayPlanner({
   canEdit: boolean;
   passActive: boolean;
   mapsUrls: Record<string, string> | null;
+  impacts: TripDetail["impacts"];
   onLocked: (feature: TripPassFeature) => void;
   onAsk: (request: CopilotAsk) => void;
   // Re-génération du jour : Biirbou du bouton flottant réfléchit, puis est content.
@@ -937,6 +942,7 @@ function DayPlanner({
               <Fragment key={item.id}>
                 <ItemRow
                   item={item}
+                  impact={impacts.find((impact) => impact.item_id === item.id)?.reason}
                   days={days}
                   mutate={mutate}
                   canEdit={canEdit}
@@ -978,12 +984,15 @@ function DayPlanner({
 
 function ItemRow({
   item,
+  impact,
   days,
   mutate,
   canEdit,
   onAsk,
 }: {
   item: TripItem;
+  // Raison donnée par Biirbou si l'activité est touchée par le dernier imprévu.
+  impact?: string;
   days: string[];
   mutate: Mutate;
   canEdit: boolean;
@@ -1044,7 +1053,7 @@ function ItemRow({
     <li
       ref={card}
       onClick={openFromCard}
-      className={`relative flex gap-3 rounded-lg bg-surface-muted p-4 sm:gap-4 ${canEdit ? "cursor-pointer active:bg-line/60 sm:cursor-auto sm:active:bg-surface-muted" : ""}`}
+      className={`relative flex gap-3 rounded-lg bg-surface-muted p-4 sm:gap-4 ${impact ? "ring-1 ring-accent/60" : ""} ${canEdit ? "cursor-pointer active:bg-line/60 sm:cursor-auto sm:active:bg-surface-muted" : ""}`}
     >
       <span className="w-11 shrink-0 font-display text-label-lg text-ink sm:w-12">{item.start_time}</span>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -1053,6 +1062,12 @@ function ItemRow({
           {item.title}
         </span>
         {item.description && <p className="text-body-sm text-ink-soft">{item.description}</p>}
+        {impact && (
+          <p className="flex items-start gap-1.5 text-body-sm text-ink">
+            <Icon name="warning" className="mt-0.5 size-4 shrink-0 text-accent" />
+            {t("item.impacted", { reason: impact })}
+          </p>
+        )}
         <ItemOrigin item={item} />
       </div>
       {canEdit && (
