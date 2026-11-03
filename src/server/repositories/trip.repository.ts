@@ -64,6 +64,8 @@ export type TripItemRow = {
   // Nom du lieu donné par Biirbou (« Meiji Jingu »), cherché pour les temps de trajet ; null : pas de lieu précis.
   place_name: string | null;
   source_post: { id: number; title: string; slug: string } | null;
+  // « Garder cette activité » : Biirbou ne la modifie ni ne la supprime jamais.
+  pinned: boolean;
   // Verrouillage optimiste (If-Match) : incrémentée à chaque modification.
   version: number;
 };
@@ -119,7 +121,7 @@ export type TripItemFields = {
   category: TripItemCategory;
 };
 
-export type TripItemChanges = Partial<TripItemFields & { color: TripItemColor | null; origin: TripItemOrigin }>;
+export type TripItemChanges = Partial<TripItemFields & { color: TripItemColor | null; origin: TripItemOrigin; pinned: boolean }>;
 
 export type TripTaskChanges = Partial<{ label: string; done: boolean }>;
 
@@ -173,7 +175,7 @@ export type NewTripExchange = {
 
 // Noms de colonnes issus de cette liste, jamais de l'entrée utilisateur.
 const TRIP_COLUMNS = ["title", "memory", "budget_target", "budget_lodging", "budget_transit", "budget_dining", "budget_activities"] as const;
-const ITEM_COLUMNS = ["day", "start_time", "title", "description", "category", "color", "origin"] as const;
+const ITEM_COLUMNS = ["day", "start_time", "title", "description", "category", "color", "origin", "pinned"] as const;
 const TASK_COLUMNS = ["label", "done"] as const;
 
 const TRIP_SUMMARY_COLUMNS = `t.public_id as id, t.title, t.destination_country_code, t.destination_state_code, t.destination_city,
@@ -181,7 +183,7 @@ const TRIP_SUMMARY_COLUMNS = `t.public_id as id, t.title, t.destination_country_
   (select count(*)::int from trip_destination d where d.trip_id = t.id) as destination_count`;
 
 // Postgres renvoie « HH:MM:SS ».
-const ITEM_COLUMNS_SELECT = `i.id, i.day, to_char(i.start_time, 'HH24:MI') as start_time, i.title, i.description, i.category, i.color, i.place_name, i.origin, i.version,
+const ITEM_COLUMNS_SELECT = `i.id, i.day, to_char(i.start_time, 'HH24:MI') as start_time, i.title, i.description, i.category, i.color, i.place_name, i.origin, i.pinned, i.version,
   case when p.id is null then null else json_build_object('id', p.id, 'title', p.title, 'slug', p.slug) end as source_post`;
 
 // Clé interne (suite du traitement) et identifiant public (renvoyé au client). Voyage et étapes dans une transaction.
@@ -331,7 +333,8 @@ export async function replaceTripPlan(tripId: number, plan: TripPlan, { record }
   try {
     await client.query("begin");
     const before = record ? await beginPlanChange(client, tripId, "regenerate") : null;
-    await client.query("delete from trip_item where trip_id = $1", [tripId]);
+    // Activités gardées par le voyageur : jamais remplacées (le nouveau planning est construit autour).
+    await client.query("delete from trip_item where trip_id = $1 and not pinned", [tripId]);
     await client.query("delete from trip_task where trip_id = $1", [tripId]);
     await client.query("delete from trip_stop where trip_id = $1", [tripId]);
 
@@ -394,13 +397,13 @@ export async function replaceTripPlan(tripId: number, plan: TripPlan, { record }
   }
 }
 
-// Une transaction : le jour n'est jamais vidé si l'insertion échoue. Les autres jours ne bougent pas.
+// Une transaction : le jour n'est jamais vidé si l'insertion échoue. Les autres jours et les activités gardées ne bougent pas.
 export async function replaceTripDayItems(tripId: number, day: string, items: TripPlan["items"]) {
   const client = await (await getDb()).connect();
   try {
     await client.query("begin");
     const before = await beginPlanChange(client, tripId, "regenerate_day");
-    await client.query("delete from trip_item where trip_id = $1 and day = $2", [tripId, day]);
+    await client.query("delete from trip_item where trip_id = $1 and day = $2 and not pinned", [tripId, day]);
     if (items.length > 0) {
       await client.query(
         `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, place_name)
@@ -666,6 +669,41 @@ export async function answerTripSuggestion(tripId: number, suggestionId: number,
   }
 }
 
+// « Tout accepter » : les propositions en attente d'une réponse de Biirbou, en une transaction et un seul changement
+// annulable. Une proposition périmée (activité disparue ou gardée depuis) est refusée, les autres sont appliquées.
+// null : aucune proposition en attente ; sinon le nombre appliqué (0 : toutes périmées).
+export async function acceptMessageSuggestions(tripId: number, messageId: number): Promise<number | null> {
+  const client = await (await getDb()).connect();
+  try {
+    await client.query("begin");
+    const before = await beginPlanChange(client, tripId, "suggestion");
+    const { rows } = await client.query<{ id: number; action: TripSuggestionAction; target_item_id: number | null }>(
+      `select id, action, target_item_id from trip_suggestion
+       where trip_id = $1 and message_id = $2 and status = 'pending'
+       order by id for update`,
+      [tripId, messageId],
+    );
+    if (rows.length === 0) {
+      await client.query("rollback");
+      return null;
+    }
+    const applied: number[] = [];
+    for (const suggestion of rows) {
+      const ok = await applySuggestion(client, tripId, suggestion.id, suggestion);
+      await client.query("update trip_suggestion set status = $2 where id = $1", [suggestion.id, ok ? "accepted" : "rejected"]);
+      if (ok) applied.push(suggestion.id);
+    }
+    if (applied.length > 0) await endPlanChange(client, tripId, "suggestion", before, null, applied);
+    await client.query("commit");
+    return applied.length;
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 // L'activité visée doit appartenir au même voyage (la proposition vient de l'IA : jamais d'id d'un autre voyage).
 async function applySuggestion(
   client: PoolClient,
@@ -683,8 +721,9 @@ async function applySuggestion(
     return true;
   }
   if (targetId === null) return false;
+  // Épinglée depuis la proposition : le voyageur la garde, la proposition est périmée.
   if (action === "delete") {
-    const { rowCount } = await client.query("delete from trip_item where id = $1 and trip_id = $2", [targetId, tripId]);
+    const { rowCount } = await client.query("delete from trip_item where id = $1 and trip_id = $2 and not pinned", [targetId, tripId]);
     return rowCount === 1;
   }
   const { rowCount } = await client.query(
@@ -692,7 +731,7 @@ async function applySuggestion(
      set day = s.day, start_time = s.start_time, title = s.title, description = s.description, category = s.category,
        source_post_id = s.source_post_id, place_name = s.place_name, origin = 'ai', version = i.version + 1
      from trip_suggestion s
-     where s.id = $1 and i.id = $2 and i.trip_id = $3`,
+     where s.id = $1 and i.id = $2 and i.trip_id = $3 and not i.pinned`,
     [suggestionId, targetId, tripId],
   );
   return rowCount === 1;
@@ -704,10 +743,11 @@ const PLAN_ITEMS = `coalesce((select json_agg(json_build_object('day', i.day, 's
     'description', i.description, 'category', i.category, 'source_post_id', i.source_post_id, 'color', i.color, 'origin', i.origin)
     order by i.day, i.start_time, i.title, i.description, i.category, i.color, i.source_post_id, i.origin)
   from trip_item i where i.trip_id = $1), '[]'::json)`;
-// Photo : le lieu en plus. Hors de l'empreinte : il ne change qu'avec le titre (déjà dedans) ou par Biirbou.
+// Photo : le lieu et l'épingle en plus. Hors de l'empreinte : le lieu ne change qu'avec le titre (déjà dedans) ou par
+// Biirbou ; épingler une activité ne bloque pas l'annulation.
 const PLAN_ITEMS_SNAPSHOT = `coalesce((select json_agg(json_build_object('day', i.day, 'start_time', i.start_time, 'title', i.title,
     'description', i.description, 'category', i.category, 'source_post_id', i.source_post_id, 'color', i.color, 'origin', i.origin,
-    'place_name', i.place_name)
+    'place_name', i.place_name, 'pinned', i.pinned)
     order by i.day, i.start_time, i.title, i.description, i.category, i.color, i.source_post_id, i.origin)
   from trip_item i where i.trip_id = $1), '[]'::json)`;
 const PLAN_TASKS = `coalesce((select json_agg(json_build_object('label', t.label, 'detail', t.detail, 'done', t.done) order by t.id)
@@ -745,21 +785,35 @@ async function beginPlanChange(client: PoolClient, tripId: number, kind: TripPla
   return (await readPlanState(client, tripId, kind)).snapshot;
 }
 
-async function endPlanChange(client: PoolClient, tripId: number, kind: TripPlanChangeKind, snapshot: unknown, suggestionId: number | null) {
+async function endPlanChange(
+  client: PoolClient,
+  tripId: number,
+  kind: TripPlanChangeKind,
+  snapshot: unknown,
+  suggestionId: number | null,
+  suggestionIds: number[] | null = null,
+) {
   const { fingerprint } = await readPlanState(client, tripId, kind);
   // Au-delà du délai, plus rien n'est annulable : l'historique ne grossit pas.
   await client.query("delete from trip_plan_change where trip_id = $1 and created_at < now() - make_interval(hours => $2)", [tripId, TRIP_UNDO_HOURS]);
   await client.query(
-    "insert into trip_plan_change (trip_id, kind, suggestion_id, snapshot, fingerprint) values ($1, $2, $3, $4, $5)",
-    [tripId, kind, suggestionId, JSON.stringify(snapshot), fingerprint],
+    "insert into trip_plan_change (trip_id, kind, suggestion_id, suggestion_ids, snapshot, fingerprint) values ($1, $2, $3, $4, $5, $6)",
+    [tripId, kind, suggestionId, suggestionIds, JSON.stringify(snapshot), fingerprint],
   );
 }
 
-type PlanChangeRow = { id: number; kind: TripPlanChangeKind; suggestion_id: number | null; fingerprint: string; created_at: string };
+type PlanChangeRow = {
+  id: number;
+  kind: TripPlanChangeKind;
+  suggestion_id: number | null;
+  suggestion_ids: number[] | null;
+  fingerprint: string;
+  created_at: string;
+};
 
 async function findLastPlanChange(db: Queryable, tripId: number): Promise<PlanChangeRow | null> {
   const { rows } = await db.query<PlanChangeRow>(
-    `select id, kind, suggestion_id, fingerprint, created_at from trip_plan_change
+    `select id, kind, suggestion_id, suggestion_ids, fingerprint, created_at from trip_plan_change
      where trip_id = $1 and created_at >= now() - make_interval(hours => $2)
      order by id desc limit 1`,
     [tripId, TRIP_UNDO_HOURS],
@@ -768,12 +822,13 @@ async function findLastPlanChange(db: Queryable, tripId: number): Promise<PlanCh
 }
 
 // Dernier changement encore annulable : dans le délai, et planning inchangé depuis (sinon l'annuler effacerait ces modifications).
-export async function findUndoablePlanChange(tripId: number): Promise<{ kind: TripPlanChangeKind; created_at: string } | null> {
+// count : propositions appliquées ensemble (« Tout accepter »), 1 sinon.
+export async function findUndoablePlanChange(tripId: number): Promise<{ kind: TripPlanChangeKind; created_at: string; count: number } | null> {
   const db = await getDb();
   const change = await findLastPlanChange(db, tripId);
   if (!change) return null;
   const { fingerprint } = await readPlanState(db, tripId, change.kind);
-  return fingerprint === change.fingerprint ? { kind: change.kind, created_at: change.created_at } : null;
+  return fingerprint === change.fingerprint ? { kind: change.kind, created_at: change.created_at, count: change.suggestion_ids?.length ?? 1 } : null;
 }
 
 // "none" : rien à annuler (ou délai passé). "changed" : planning modifié à la main depuis, rien n'est restauré.
@@ -794,15 +849,16 @@ export async function undoLastPlanChange(tripId: number): Promise<"undone" | "no
 
     // Récit supprimé depuis : l'activité restaurée perd seulement son lien (comme le on delete set null de trip_item).
     await client.query("delete from trip_item where trip_id = $1", [tripId]);
-    // Photo prise avant la provenance ou le lieu des activités : origin absent = activité de Biirbou, place_name absent = null.
+    // Photo prise avant la provenance, le lieu ou l'épingle : origin absent = activité de Biirbou, place_name absent = null,
+    // pinned absent = non gardée.
     await client.query(
-      `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, color, origin, place_name)
+      `insert into trip_item (trip_id, day, start_time, title, description, category, source_post_id, color, origin, place_name, pinned)
        select $1, x.day, x.start_time, x.title, x.description, x.category, (select p.id from post p where p.id = x.source_post_id), x.color,
-         coalesce(x.origin, 'ai'), x.place_name
+         coalesce(x.origin, 'ai'), x.place_name, coalesce(x.pinned, false)
        from trip_plan_change c,
          jsonb_to_recordset(c.snapshot -> 'items')
            as x (day date, start_time time, title varchar, description varchar, category trip_item_category, source_post_id int, color varchar,
-             origin trip_item_origin, place_name varchar)
+             origin trip_item_origin, place_name varchar, pinned boolean)
        where c.id = $2`,
       [tripId, change.id],
     );
@@ -840,8 +896,9 @@ export async function undoLastPlanChange(tripId: number): Promise<"undone" | "no
       );
     }
     // La proposition annulée redevient une proposition en attente : l'utilisateur peut encore l'accepter plus tard.
-    if (change.suggestion_id !== null) {
-      await client.query("update trip_suggestion set status = 'pending' where id = $1 and trip_id = $2", [change.suggestion_id, tripId]);
+    const suggestionIds = change.suggestion_ids ?? (change.suggestion_id === null ? [] : [change.suggestion_id]);
+    if (suggestionIds.length > 0) {
+      await client.query("update trip_suggestion set status = 'pending' where id = any($1::int[]) and trip_id = $2", [suggestionIds, tripId]);
     }
     await client.query("delete from trip_plan_change where id = $1", [change.id]);
     await client.query("commit");

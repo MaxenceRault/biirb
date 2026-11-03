@@ -21,6 +21,7 @@ import {
   regenerateTripDay,
   undoPlanChange,
   sendTripMessage,
+  acceptMessageSuggestions,
   TripError,
   updateTrip,
   updateTripItem,
@@ -190,6 +191,15 @@ export function answerTripSuggestionController(request: Request, { params }: { p
     const body = await parseBody(request, answerTripSuggestionSchema);
     if (!suggestionId.success || !body) return errorResponse(400, "INVALID_INPUT");
     return json(await answerTripSuggestion(userId, tripId, suggestionId.data, body.accepted));
+  });
+}
+
+// POST /api/v1/trips/[id]/messages/[messageId]/accept : « Tout accepter » (propositions en attente de cette réponse)
+export function acceptMessageSuggestionsController(request: Request, { params }: { params: Params }) {
+  return withTrip(request, params, async (userId, tripId, routeParams) => {
+    const messageId = idParamSchema.safeParse(routeParams.messageId);
+    if (!messageId.success) return errorResponse(400, "INVALID_INPUT");
+    return json(await acceptMessageSuggestions(userId, tripId, messageId.data));
   });
 }
 

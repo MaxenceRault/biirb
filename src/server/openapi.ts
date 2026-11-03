@@ -819,6 +819,15 @@ export function buildOpenApiDocument() {
             "imprévu choisi dans « Adapter ma journée », traduit par le serveur en libellé fixe, jamais enregistré. Le prompt contient aussi le budget, les dépenses et la mémoire du voyage, mise à jour après l'échange.",
         }),
       },
+      "/trips/{id}/messages/{messageId}/accept": {
+        post: tripRoute("Accepter toutes les propositions d'une réponse de Biirbou", {
+          params: ["id", "messageId"],
+          description:
+            "Propositions en attente de cette réponse, appliquées en une transaction : un seul « Annuler » les défait toutes. " +
+            "Une proposition périmée (activité disparue ou gardée depuis) est refusée, les autres sont appliquées. " +
+            "404 si aucune n'est en attente, 409 SUGGESTION_OUTDATED si toutes sont périmées.",
+        }),
+      },
       "/trips/{id}/suggestions/{suggestionId}": {
         patch: tripRoute("Accepter ou refuser une proposition de l'IA", {
           params: ["id", "suggestionId"],
@@ -830,7 +839,12 @@ export function buildOpenApiDocument() {
         post: tripRoute("Ajouter une activité", { body: createTripItemSchema, ok: { 201: json("Voyage à jour", tripDetail) } }),
       },
       "/trips/{id}/items/{itemId}": {
-        patch: tripRoute("Modifier une activité", { params: ["id", "itemId"], body: updateTripItemSchema, versioned: true }),
+        patch: tripRoute("Modifier une activité", {
+          params: ["id", "itemId"],
+          body: updateTripItemSchema,
+          versioned: true,
+          description: "pinned : « Garder cette activité » ; Biirbou ne la modifie ni ne la supprime jamais (discussion, jour re-généré, voyage réimaginé).",
+        }),
         delete: tripRoute("Supprimer une activité", { params: ["id", "itemId"], versioned: true }),
       },
       "/trips/{id}/notification-settings": {
