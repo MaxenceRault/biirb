@@ -22,8 +22,8 @@ const GLANCES = [
 const random = (min: number, max: number) => min + Math.random() * (max - min);
 const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
 
-// Mascotte de Biirbou : hibou plein encre, yeux blancs,
-// bec à l'accent ; partout le même, jamais d'autres couleurs.
+// Mascotte de Biirbou : pigeon voyageur de profil, tout en rondeurs, plein encre, œil blanc,
+// bec et pattes à l'accent ; partout le même, jamais d'autres couleurs.
 // Décoratif : son nom est toujours écrit à côté. Animations en SVG + Motion, aucune si l'utilisateur les réduit,
 // en pause quand l'onglet n'est pas visible.
 // animated={false} : immobile (titres) ; seule la mascotte du bouton flottant vit sa vie.
@@ -156,13 +156,10 @@ export function Biirbou({
     };
   }, [mood, reduce]);
 
-  const bodyColor = "fill-ink";
-  const eyeColor = "fill-surface";
-  const pupilColor = "fill-ink";
-  const lineColor = "stroke-surface";
-  // Ordre : réflexion (en l'air), survol (il te regarde), regard ailleurs, sinon la souris.
-  const pupil = mood === "thinking" ? { x: 2, y: -3 } : mood === "sad" ? { x: 0, y: 2.5 } : hovered || inflating ? { x: 0, y: 0.5 } : (glance ?? (followPointer ? gaze : { x: 0, y: 0 }));
-  const eyeScale = (hovered || inflating) && !reduce ? 1.12 : 1;
+  // Un seul œil (vu de profil) : décalages du regard réduits pour que la pupille reste dans l'œil.
+  const look = mood === "thinking" ? { x: 2, y: -3 } : mood === "sad" ? { x: 0, y: 2.5 } : hovered || inflating ? { x: 1, y: 0.5 } : (glance ?? (followPointer ? gaze : { x: 0, y: 0 }));
+  const pupil = { x: look.x / 2, y: look.y / 2 };
+  const eyeScale = (hovered || inflating) && !reduce ? 1.15 : 1;
   const eyeOpen = blink ? 0.12 : mood === "tired" ? 0.5 : mood === "sad" ? 0.8 : 1;
   const showOpenEyes = !asleep && mood !== "happy";
 
@@ -177,7 +174,7 @@ export function Biirbou({
           reduce
             ? undefined
             : mood === "thinking"
-              ? { rotate: [-6, 6], y: 0, scaleY: 1, transition: { rotate: { duration: 0.8, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" } } }
+              ? { rotate: [-2, 2], y: 0, scaleY: 1, transition: { rotate: { duration: 0.6, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" } } }
               : asleep
                 ? { rotate: 0, y: 0, scaleY: [1, 0.97], transition: { scaleY: { duration: 1.6, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" } } }
                 : pressed
@@ -196,7 +193,7 @@ export function Biirbou({
                   : mood === "sad"
                   ? { rotate: [0, -5, 5, -3, 0], y: 1.5, scaleY: 0.96, transition: { rotate: { duration: 0.8, ease: "easeInOut" }, default: SPRING } }
                   : hovered
-                  ? { rotate: -8, y: -3, scaleX: 1, scaleY: 1.04, transition: SPRING }
+                  ? { rotate: -6, y: -3, scaleX: 1, scaleY: 1.04, transition: SPRING }
                   : { rotate: 0, y: 0, scaleX: 1, scaleY: 1, transition: SPRING }
         }
       >
@@ -207,33 +204,46 @@ export function Biirbou({
           animate={ruffles > 0 && !reduce ? { rotate: [0, -7, 6, -4, 2, 0] } : { rotate: 0 }}
           transition={{ duration: 0.7, ease: "easeInOut" }}
         >
-        <path
-          d="M13.5 15.5 Q20 21 32 20.5 Q44 21 50.5 15.5 Q55 27 54 38 Q52.5 56 32 56 Q11.5 56 10 38 Q9 27 13.5 15.5 Z"
-          className={bodyColor}
-        />
-        {showOpenEyes &&
-          [24, 40].map((cx) => (
-            <motion.g
-              key={cx}
-              style={{ originX: 0.5, originY: 0.5 }}
-              animate={{ scaleX: eyeScale, scaleY: eyeOpen * eyeScale }}
-              transition={{ duration: blink ? 0.07 : 0.2 }}
-            >
-              <circle cx={cx} cy="32" r="8.5" className={eyeColor} />
-              <motion.circle cx={cx} cy="33" r="4" className={pupilColor} animate={reduce ? undefined : pupil} transition={SPRING} />
-            </motion.g>
-          ))}
-        {/* Yeux fermés (dort) ou en accent circonflexe (content). */}
-        {!showOpenEyes && (
-          <g fill="none" strokeWidth="2.6" strokeLinecap="round" className={lineColor}>
-            {asleep ? (
-              <path d="M17 32 Q24 37 31 32 M33 32 Q40 37 47 32" />
+          <path d="M27 55 V60 M37 55 V60" fill="none" strokeWidth="3.5" strokeLinecap="round" className="stroke-accent" />
+          <path d="M15 37 L5 45 L16 47 Z" strokeWidth="4" strokeLinejoin="round" className="fill-ink stroke-ink" />
+          <ellipse cx="32" cy="41" rx="20" ry="15" className="fill-ink" />
+          {/* Cou : tête et corps ne font qu'une silhouette, même quand la tête bouge. */}
+          <path d="M29.5 25 Q27 31 20 33 L49.7 34 Q51 30 50.5 25 Z" className="fill-ink" />
+          {/* Tête à part : elle hoche d'avant en arrière, comme un pigeon qui marche, quand il réfléchit. */}
+          <motion.g
+            animate={
+              reduce
+                ? undefined
+                : mood === "thinking"
+                  ? { x: [0, 3, 0], y: 0, transition: { x: { duration: 0.6, repeat: Infinity, ease: "easeInOut" } } }
+                  : asleep
+                    ? { x: -2, y: 3, transition: SPRING }
+                    : mood === "sad" || mood === "tired"
+                      ? { x: 0, y: 2, transition: SPRING }
+                      : { x: 0, y: 0, transition: SPRING }
+            }
+          >
+            <circle cx="40" cy="21" r="12" className="fill-ink" />
+            {showOpenEyes ? (
+              <motion.g
+                style={{ originX: 0.5, originY: 0.5 }}
+                animate={{ scaleX: eyeScale, scaleY: eyeOpen * eyeScale }}
+                transition={{ duration: blink ? 0.07 : 0.2 }}
+              >
+                <circle cx="43" cy="19" r="5.5" className="fill-surface" />
+                <motion.circle cx="43.5" cy="19" r="3" className="fill-ink" animate={reduce ? undefined : pupil} transition={SPRING} />
+              </motion.g>
             ) : (
-              <path d="M17 34 Q24 27 31 34 M33 34 Q40 27 47 34" />
+              <path
+                d={asleep ? "M38.5 19 Q43 23.5 47.5 19" : "M38.5 21 Q43 15.5 47.5 21"}
+                fill="none"
+                strokeWidth="2.8"
+                strokeLinecap="round"
+                className="stroke-surface"
+              />
             )}
-          </g>
-        )}
-        <path d="M29.6 40.5 L32 45 L34.4 40.5 Z" strokeWidth="1.4" strokeLinejoin="round" className="fill-accent stroke-accent" />
+            <path d="M51 17.5 L57 21 L51 24.5 Z" strokeWidth="3" strokeLinejoin="round" className="fill-accent stroke-accent" />
+          </motion.g>
         </motion.g>
       </motion.g>
       <AnimatePresence>
