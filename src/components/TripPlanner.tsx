@@ -85,6 +85,8 @@ export type TripItem = {
 export type TripTask = { id: number; label: string; detail: string | null; done: boolean };
 
 // Bouton d'une fonction du pass sur un voyage sans pass : grisé, mais cliquable (ouvre la fenêtre du pass).
+// Biirbou content après une re-génération réussie.
+const CHEER_MS = 1_500;
 const LOCKED_BUTTON = "text-ink-soft opacity-60 hover:opacity-90";
 
 export type TripDetail = {
@@ -168,6 +170,9 @@ export function TripPlanner({ tripId }: { tripId: string }) {
   const [undoing, setUndoing] = useState(false);
   // Incrémenté après une annulation : la discussion relit ses propositions (une proposition annulée redevient en attente).
   const [chatVersion, setChatVersion] = useState(0);
+  // Biirbou du bouton flottant : réfléchit pendant une re-génération (voyage ou jour), content quand elle aboutit.
+  const [dayBusy, setDayBusy] = useState(false);
+  const [cheer, setCheer] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [view, setView] = useState<"plan" | "table" | "expenses">("plan");
   const [passFeature, setPassFeature] = useState<TripPassFeature | null>(null);
@@ -249,8 +254,14 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     });
     if (!confirmed) return;
     setRegenerating(true);
-    await mutate("/regenerate", "POST");
+    const ok = await mutate("/regenerate", "POST");
     setRegenerating(false);
+    if (ok) celebrate();
+  }
+
+  function celebrate() {
+    setCheer(true);
+    setTimeout(() => setCheer(false), CHEER_MS);
   }
 
   // Une réimagination remplace tout le planning : on confirme avant de revenir en arrière.
@@ -376,6 +387,8 @@ export function TripPlanner({ tripId }: { tripId: string }) {
               mapsUrls={mapsUrls}
               onLocked={setPassFeature}
               onAsk={openCopilot}
+              onBusyChange={setDayBusy}
+              onDone={celebrate}
             />
             {/* Tuiles en ligne uniquement : rien hors connexion. */}
             {online && <TripMap map={map} />}
@@ -404,7 +417,16 @@ export function TripPlanner({ tripId }: { tripId: string }) {
       {online && !copilotOpen && (
         <CopilotLauncher
           onOpen={() => openCopilot()}
-          tired={state.data.aiQuota.limit !== null && state.data.aiQuota.used >= state.data.aiQuota.limit}
+          mood={
+            regenerating || dayBusy
+              ? "thinking"
+              : cheer
+                ? "happy"
+                : state.data.aiQuota.limit !== null && state.data.aiQuota.used >= state.data.aiQuota.limit
+                  ? "tired"
+                  : "idle"
+          }
+          oops={chatVersion}
         />
       )}
 
@@ -689,6 +711,8 @@ function DayPlanner({
   mapsUrls,
   onLocked,
   onAsk,
+  onBusyChange,
+  onDone,
 }: {
   trip: Trip;
   items: TripItem[];
@@ -698,6 +722,9 @@ function DayPlanner({
   mapsUrls: Record<string, string> | null;
   onLocked: (feature: TripPassFeature) => void;
   onAsk: (request: CopilotAsk) => void;
+  // Re-génération du jour : Biirbou du bouton flottant réfléchit, puis est content.
+  onBusyChange: (busy: boolean) => void;
+  onDone: () => void;
 }) {
   const t = useTranslations("Planner");
   const confirm = useConfirm();
@@ -724,8 +751,11 @@ function DayPlanner({
     });
     if (!confirmed) return;
     setRegeneratingDay(true);
-    await mutate(`/days/${day}/regenerate`, "POST");
+    onBusyChange(true);
+    const ok = await mutate(`/days/${day}/regenerate`, "POST");
     setRegeneratingDay(false);
+    onBusyChange(false);
+    if (ok) onDone();
   }
 
   return (

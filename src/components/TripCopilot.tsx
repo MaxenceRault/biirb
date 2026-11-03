@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type Keyboard
 import { useFormatter, useTranslations } from "next-intl";
 import { motion, useReducedMotion } from "motion/react";
 import { Badge } from "@/components/ui/Badge";
-import { Biirbou } from "@/components/ui/Biirbou";
+import { Biirbou, type BiirbouMood } from "@/components/ui/Biirbou";
 import { useOnline } from "@/client/hooks/useOnline";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -115,7 +115,8 @@ export function CopilotCard({ detail, onOpen }: { detail: TripDetail; onOpen: (r
 // Bouton flottant : Biirbou depuis tous les onglets du voyage (Planning, Tableau, Dépenses). Au repos, la mascotte seule
 // (animée) ; au survol ou au focus, le fond blanc et l'ombre apparaissent et son nom glisse à sa droite (toujours lu par
 // les lecteurs d'écran).
-export function CopilotLauncher({ onOpen, tired = false }: { onOpen: () => void; tired?: boolean }) {
+// mood : réfléchit (re-génération en cours), content (réussie), fatigué (quota du jour épuisé) ; oops : après un « Annuler ».
+export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: () => void; mood?: BiirbouMood; oops?: number }) {
   const t = useTranslations("Planner");
   const reduce = useReducedMotion() ?? false;
   const [hovered, setHovered] = useState(false);
@@ -148,10 +149,10 @@ export function CopilotLauncher({ onOpen, tired = false }: { onOpen: () => void;
       onBlur={() => setHovered(false)}
       className="group fixed right-4 bottom-4 z-40 flex touch-manipulation items-center rounded-full select-none [-webkit-touch-callout:none] border border-transparent p-1.5 font-display text-label-lg text-ink transition-all duration-300 ease-out hover:border-line hover:bg-surface hover:shadow-lg focus-visible:border-line focus-visible:bg-surface focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none motion-reduce:transition-none md:right-6 md:bottom-6"
     >
-      {/* Quota du jour épuisé : Biirbou est fatigué. */}
       <motion.span layoutId={reduce ? undefined : MASCOT_LAYOUT_ID} transition={FLIGHT} className="flex">
         <Biirbou
-          mood={tired ? "tired" : "idle"}
+          mood={mood}
+          oops={oops}
           hovered={hovered}
           pressed={pressed}
           inflating={holding && !pressed}
