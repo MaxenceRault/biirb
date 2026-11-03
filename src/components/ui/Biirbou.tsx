@@ -3,9 +3,9 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
-// idle : vit sa vie (clignements, regards, s'endort sans activité) ; thinking : Biirbou répond ; happy : proposition
-// acceptée ; asleep : endormi (hors ligne, repos).
-export type BiirbouMood = "idle" | "thinking" | "happy" | "asleep";
+// idle : vit sa vie (clignements, regards, plumes ébouriffées, s'endort sans activité) ; thinking : Biirbou répond ;
+// happy : content ; tired : fatigué (quota du jour épuisé) ; asleep : endormi.
+export type BiirbouMood = "idle" | "thinking" | "happy" | "tired" | "asleep";
 
 // Inactivité avant de s'endormir (mood idle) : aucun mouvement de souris, toucher, touche ni défilement.
 const SLEEP_AFTER_MS = 45_000;
@@ -20,16 +20,34 @@ const GLANCES = [
 ];
 
 const random = (min: number, max: number) => min + Math.random() * (max - min);
+const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
 
 // Mascotte de Biirbou : hibou plein encre, yeux blancs,
 // bec à l'accent ; partout le même, jamais d'autres couleurs.
 // Décoratif : son nom est toujours écrit à côté. Animations en SVG + Motion, aucune si l'utilisateur les réduit,
 // en pause quand l'onglet n'est pas visible.
 // animated={false} : immobile (titres) ; seule la mascotte du bouton flottant vit sa vie.
-export function Biirbou({ mood = "idle", animated = true, className = "size-6" }: { mood?: BiirbouMood; animated?: boolean; className?: string }) {
+// hovered : on le survole, il te remarque (petit sursaut, tête penchée, grands yeux). followPointer : ses yeux suivent
+// la souris.
+export function Biirbou({
+  mood = "idle",
+  animated = true,
+  hovered = false,
+  followPointer = false,
+  className = "size-6",
+}: {
+  mood?: BiirbouMood;
+  animated?: boolean;
+  hovered?: boolean;
+  followPointer?: boolean;
+  className?: string;
+}) {
   const reduce = (useReducedMotion() ?? false) || !animated;
+  const svg = useRef<SVGSVGElement>(null);
   const [blink, setBlink] = useState(false);
-  const [glance, setGlance] = useState({ x: 0, y: 0 });
+  const [glance, setGlance] = useState<{ x: number; y: number } | null>(null);
+  const [gaze, setGaze] = useState({ x: 0, y: 0 });
+  const [ruffles, setRuffles] = useState(0);
   const [dozing, setDozing] = useState(false);
   const [hops, setHops] = useState(0);
   const dozingRef = useRef(false);
@@ -57,11 +75,15 @@ export function Biirbou({ mood = "idle", animated = true, className = "size-6" }
         blinkLoop();
       }, random(2_500, 6_000));
 
+    // Regard ailleurs, et parfois (1 fois sur 6) il ébouriffe ses plumes.
     const glanceLoop = () =>
       later(() => {
         if (visible() && mood !== "thinking") {
-          setGlance(GLANCES[Math.floor(Math.random() * GLANCES.length)]);
-          later(() => setGlance({ x: 0, y: 0 }), 1_200);
+          if (Math.random() < 1 / 6) setRuffles((count) => count + 1);
+          else {
+            setGlance(GLANCES[Math.floor(Math.random() * GLANCES.length)]);
+            later(() => setGlance(null), 1_200);
+          }
         }
         glanceLoop();
       }, random(4_000, 9_000));
@@ -71,7 +93,29 @@ export function Biirbou({ mood = "idle", animated = true, className = "size-6" }
     return () => timers.forEach(clearTimeout);
   }, [alive, mood]);
 
-  // S'endort sans activité, se réveille d'un petit saut au premier geste.
+  // Les yeux suivent la souris (une mise à jour par image au plus).
+  useEffect(() => {
+    if (!alive || !followPointer) return;
+    let frame = 0;
+    function onMove(event: PointerEvent) {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const box = svg.current?.getBoundingClientRect();
+        if (!box) return;
+        setGaze({
+          x: clamp((event.clientX - (box.left + box.width / 2)) / 120, 3),
+          y: clamp((event.clientY - (box.top + box.height / 2)) / 160, 2),
+        });
+      });
+    }
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", onMove);
+    };
+  }, [alive, followPointer]);
+
+  // S'endort sans activité, se réveille d'un petit saut au premier geste (survoler le bouton suffit).
   useEffect(() => {
     if (mood !== "idle" || reduce) return;
     let timer = setTimeout(() => setDozingState(true), SLEEP_AFTER_MS);
@@ -98,11 +142,14 @@ export function Biirbou({ mood = "idle", animated = true, className = "size-6" }
   const eyeColor = "fill-surface";
   const pupilColor = "fill-ink";
   const lineColor = "stroke-surface";
-  const pupil = mood === "thinking" ? { x: 2, y: -3 } : glance;
+  // Ordre : réflexion (en l'air), survol (il te regarde), regard ailleurs, sinon la souris.
+  const pupil = mood === "thinking" ? { x: 2, y: -3 } : hovered ? { x: 0, y: 0.5 } : (glance ?? (followPointer ? gaze : { x: 0, y: 0 }));
+  const eyeScale = hovered && !reduce ? 1.12 : 1;
+  const eyeOpen = blink ? 0.12 : mood === "tired" ? 0.5 : 1;
   const showOpenEyes = !asleep && mood !== "happy";
 
   return (
-    <svg viewBox="0 0 64 64" aria-hidden="true" className={`shrink-0 overflow-visible ${className}`}>
+    <svg ref={svg} viewBox="0 0 64 64" aria-hidden="true" className={`shrink-0 overflow-visible ${className}`}>
       {/* Nouvelle clé = nouveau départ : petit saut au réveil et quand il est content. */}
       <motion.g
         key={`${hops}-${mood === "happy"}`}
@@ -115,16 +162,30 @@ export function Biirbou({ mood = "idle", animated = true, className = "size-6" }
               ? { rotate: [-6, 6], y: 0, scaleY: 1, transition: { rotate: { duration: 0.8, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" } } }
               : asleep
                 ? { rotate: 0, y: 0, scaleY: [1, 0.97], transition: { scaleY: { duration: 1.6, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" } } }
-                : { rotate: 0, y: 0, scaleY: 1, transition: SPRING }
+                : hovered
+                  ? { rotate: -8, y: -3, scaleY: 1.04, transition: SPRING }
+                  : { rotate: 0, y: 0, scaleY: 1, transition: SPRING }
         }
       >
+        {/* Plumes ébouriffées : une secousse à chaque nouvelle clé. */}
+        <motion.g
+          key={ruffles}
+          style={{ originX: 0.5, originY: 1 }}
+          animate={ruffles > 0 && !reduce ? { rotate: [0, -7, 6, -4, 2, 0] } : { rotate: 0 }}
+          transition={{ duration: 0.7, ease: "easeInOut" }}
+        >
         <path
           d="M13.5 15.5 Q20 21 32 20.5 Q44 21 50.5 15.5 Q55 27 54 38 Q52.5 56 32 56 Q11.5 56 10 38 Q9 27 13.5 15.5 Z"
           className={bodyColor}
         />
         {showOpenEyes &&
           [24, 40].map((cx) => (
-            <motion.g key={cx} style={{ originX: 0.5, originY: 0.5 }} animate={{ scaleY: blink ? 0.12 : 1 }} transition={{ duration: 0.07 }}>
+            <motion.g
+              key={cx}
+              style={{ originX: 0.5, originY: 0.5 }}
+              animate={{ scaleX: eyeScale, scaleY: eyeOpen * eyeScale }}
+              transition={{ duration: blink ? 0.07 : 0.2 }}
+            >
               <circle cx={cx} cy="32" r="8.5" className={eyeColor} />
               <motion.circle cx={cx} cy="33" r="4" className={pupilColor} animate={reduce ? undefined : pupil} transition={SPRING} />
             </motion.g>
@@ -140,6 +201,7 @@ export function Biirbou({ mood = "idle", animated = true, className = "size-6" }
           </g>
         )}
         <path d="M29.6 40.5 L32 45 L34.4 40.5 Z" strokeWidth="1.4" strokeLinejoin="round" className="fill-accent stroke-accent" />
+        </motion.g>
       </motion.g>
       <AnimatePresence>
         {asleep && !reduce && (

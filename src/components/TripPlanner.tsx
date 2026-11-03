@@ -401,7 +401,12 @@ export function TripPlanner({ tripId }: { tripId: string }) {
         onReload={reloadTrip}
         onUpsell={setPassFeature}
       />
-      {online && !copilotOpen && <CopilotLauncher onOpen={() => openCopilot()} />}
+      {online && !copilotOpen && (
+        <CopilotLauncher
+          onOpen={() => openCopilot()}
+          tired={state.data.aiQuota.limit !== null && state.data.aiQuota.used >= state.data.aiQuota.limit}
+        />
+      )}
 
       {!pass.active && (
         <TripPassDialog feature={passFeature} onClose={() => setPassFeature(null)} tripId={tripId} pass={pass} role={role} onRefresh={reloadPass} />

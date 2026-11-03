@@ -107,15 +107,26 @@ export function CopilotCard({ detail, onOpen }: { detail: TripDetail; onOpen: (r
 // Bouton flottant : Biirbou depuis tous les onglets du voyage (Planning, Tableau, Dépenses). Au repos, la mascotte seule
 // (animée) ; au survol ou au focus, le fond blanc et l'ombre apparaissent et son nom glisse à sa droite (toujours lu par
 // les lecteurs d'écran).
-export function CopilotLauncher({ onOpen }: { onOpen: () => void }) {
+export function CopilotLauncher({ onOpen, tired = false }: { onOpen: () => void; tired?: boolean }) {
   const t = useTranslations("Planner");
+  const [hovered, setHovered] = useState(false);
   return (
     <button
       type="button"
       onClick={onOpen}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
       className="group fixed right-4 bottom-4 z-40 flex items-center rounded-full border border-transparent p-1.5 font-display text-label-lg text-ink transition-all duration-300 ease-out hover:border-line hover:bg-surface hover:shadow-lg focus-visible:border-line focus-visible:bg-surface focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none motion-reduce:transition-none md:right-6 md:bottom-6"
     >
-      <Biirbou className="size-12 drop-shadow-md transition-[filter] duration-300 group-hover:drop-shadow-none group-focus-visible:drop-shadow-none" />
+      {/* Quota du jour épuisé : Biirbou est fatigué. */}
+      <Biirbou
+        mood={tired ? "tired" : "idle"}
+        hovered={hovered}
+        followPointer
+        className="size-12 drop-shadow-md transition-[filter] duration-300 group-hover:drop-shadow-none group-focus-visible:drop-shadow-none"
+      />
       <span className="max-w-0 -translate-x-2 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:mr-3 group-hover:ml-2 group-hover:max-w-xs group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:mr-3 group-focus-visible:ml-2 group-focus-visible:max-w-xs group-focus-visible:translate-x-0 group-focus-visible:opacity-100 motion-reduce:transition-none">
         {t("copilot.launcher")}
       </span>
