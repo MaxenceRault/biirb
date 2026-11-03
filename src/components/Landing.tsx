@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { getFormatter, getLocale, getTranslations } from "next-intl/server";
 import { CreateTripLink } from "@/components/CreateTripLink";
 import { HomeHero } from "@/components/HomeHero";
+import { LandingCopilotDemo } from "@/components/LandingCopilotDemo";
 import { SectionDots } from "@/components/SectionDots";
 import { StoryCarousel, type CarouselStory } from "@/components/StoryCarousel";
 import { TrackEvent } from "@/components/TrackEvent";
@@ -124,7 +125,7 @@ function SectionHeader({ id, eyebrow, title, text }: { id: string; eyebrow?: Rea
 
 function FeatureCard({ icon, title, text }: { icon: IconName; title: string; text: string }) {
   return (
-    <Card className="flex flex-col gap-3 p-6 shadow-xs">
+    <Card className="flex h-full flex-col gap-3 p-6 shadow-xs">
       <span className="flex size-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
         <Icon name={icon} className="size-5" />
       </span>
@@ -281,7 +282,7 @@ async function Copilot() {
     <section aria-labelledby="landing-copilot">
       <SectionHeader id="landing-copilot" eyebrow={t("eyebrow")} title={t("title")} text={t("text")} />
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <CopilotDemo />
+        <LandingCopilotDemo />
         <ul className="grid gap-4 sm:grid-cols-2">
           {COPILOT_FEATURES.map(({ key, icon }) => (
             <li key={key} className="flex gap-3">
@@ -302,35 +303,6 @@ async function Copilot() {
         {t("honest")}
       </p>
     </section>
-  );
-}
-
-// Illustration d'un échange (texte d'exemple, rien de cliquable) : décrite par sa légende.
-async function CopilotDemo() {
-  const t = await getTranslations("Landing.copilot.demo");
-
-  return (
-    <figure className="flex flex-col gap-3">
-      <Card aria-hidden="true" className="flex flex-col gap-4 p-5 shadow-sm">
-        <div className="flex items-center gap-2 border-b border-line pb-3">
-          <Biirbou className="size-8" />
-          <span className="font-display text-label-lg text-ink">{t("name")}</span>
-        </div>
-        <p className="ml-auto max-w-[85%] rounded-lg rounded-br-none bg-ink px-3.5 py-2.5 text-body-sm text-surface">{t("question")}</p>
-        <p className="max-w-[90%] rounded-lg rounded-bl-none bg-surface-muted px-3.5 py-2.5 text-body-sm text-ink">{t("answer")}</p>
-        <div className="flex flex-col gap-3 rounded-lg border border-line p-3.5">
-          <p className="flex items-center gap-2 font-display text-label-md text-ink">
-            <Icon name="sparkles" className="size-4 text-accent" />
-            {t("proposal")}
-          </p>
-          <div className="flex gap-2">
-            <span className={buttonClassName("sm", "pointer-events-none")}>{t("accept")}</span>
-            <span className={buttonClassName("sm", "pointer-events-none", "secondary")}>{t("refuse")}</span>
-          </div>
-        </div>
-      </Card>
-      <figcaption className="text-center text-label-sm text-ink-soft">{t("caption")}</figcaption>
-    </figure>
   );
 }
 
