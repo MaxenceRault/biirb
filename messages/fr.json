@@ -147,7 +147,13 @@
         "proposal": "Remplacer « Balade dans le parc » par « Visite du musée »",
         "accept": "Accepter",
         "refuse": "Refuser",
-        "caption": "Exemple d'échange avec Biirbou pendant un voyage"
+        "accepted": "Activité remplacée dans le planning",
+        "refused": "Proposition refusée",
+        "reasoning": ["Biirbou range son parapluie", "Biirbou réorganise l'après-midi"],
+        "replyAccepted": "C'est fait ! Le musée est dans ton planning, et tu restes au sec. Bonne visite !",
+        "replyRefused": "Pas de souci, on garde la balade. Si la pluie insiste, je te trouve un autre abri.",
+        "replay": "Rejouer",
+        "caption": "Exemple d'échange avec Biirbou pendant un voyage : essaie de lui répondre"
       }
     },
     "pass": {

@@ -119,6 +119,7 @@ src/
 │   ├── Landing.tsx            # Sections de l'accueil : bandeau (h1 + CTA), s'inspirer, planifier gratuitement, Biirbou, pass voyage, rappel ; ordre selon l'angle publicitaire ?angle= (lib/landing.ts)
 │   ├── SectionDots.tsx        # Points de navigation de l'accueil (client, grand écran) : un point par bloc, fixé à droite, bloc lu en corail, nom au survol, défilement au clic
 │   ├── StoryCarousel.tsx      # Carrousel des récits récents de l'accueil (client) : défilement natif (swipe, scroll-snap), flèches sur grand écran, sans défilement automatique
+│   ├── LandingCopilotDemo.tsx # Démo « Biirbou, ton copilote » de l'accueil (client) : Accepter / Refuser cliquables, Biirbou réfléchit puis répond (content ou déçu) comme dans le panneau du planning ; rien n'est envoyé, « Rejouer » remet la démo
 │   ├── CreateTripLink.tsx     # Bouton « Créer mon voyage gratuitement » (visiteur → inscription puis /planner, mesuré : create_trip_clicked)
 │   ├── HomeSidebar.tsx        # Colonnes latérales de l'accueil (grand écran) : types de récit, destinations tendance, invitation au planificateur
 │   ├── FeedFilterLink.tsx     # Lien de filtre du feed (type de récit, client) : ne remonte pas en haut de la page, revient au début du feed s'il est hors écran
