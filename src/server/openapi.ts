@@ -754,7 +754,8 @@ export function buildOpenApiDocument() {
             "Biirbou sait quel jour du voyage on est ; pendant le voyage, l'heure de la destination (fuseau de l'étape du jour) prime. " +
             "position (arrondie à 2 décimales par le serveur) ou place (« Je suis à… », l'un ou l'autre) : utilisés " +
             "seulement pendant le voyage, jamais enregistrés. energy (tired, motivated, relaxed) : adapte les propositions, " +
-            "jamais enregistrée. Le prompt contient aussi le budget, les dépenses et la mémoire du voyage, mise à jour après l'échange.",
+            "jamais enregistrée. disruption (reason : rain, closed, late, cancelled, budget, wish ; day : jour du voyage, sinon 400) : " +
+            "imprévu choisi dans « Adapter ma journée », traduit par le serveur en libellé fixe, jamais enregistré. Le prompt contient aussi le budget, les dépenses et la mémoire du voyage, mise à jour après l'échange.",
         }),
       },
       "/trips/{id}/suggestions/{suggestionId}": {
