@@ -468,14 +468,7 @@
         "action": "Re-générer"
       },
       "maps": "Itinéraire du jour",
-      "today": "Aujourd'hui",
-      "reasoning": [
-        "Biirbou redessine cette journée",
-        "Biirbou cherche des lieux proches les uns des autres",
-        "Biirbou relit les récits de la communauté",
-        "Biirbou cale les repas entre deux visites",
-        "Biirbou vérifie l'ordre de la journée"
-      ]
+      "today": "Aujourd'hui"
     },
     "item": {
       "edit": "Modifier l'activité {title}",
