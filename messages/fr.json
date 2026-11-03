@@ -568,7 +568,7 @@
     },
     "undo": {
       "messages": {
-        "suggestion": "Proposition de Biirbou appliquée {when}.",
+        "suggestion": "{count, plural, one {Proposition de Biirbou appliquée} other {# propositions de Biirbou appliquées}} {when}.",
         "regenerate": "Biirbou a réimaginé le planning {when}.",
         "regenerate_day": "Biirbou a re-généré un jour {when}."
       },
@@ -596,7 +596,7 @@
       "regenerating": "Biirbou réimagine…",
       "regenerateConfirm": {
         "title": "Réimaginer le planning ?",
-        "message": "Biirbou remplace toutes les activités, la checklist et le budget. Vous pourrez annuler pendant {hours} h.",
+        "message": "Biirbou remplace toutes les activités (sauf celles que vous gardez), la checklist et le budget. Vous pourrez annuler pendant {hours} h.",
         "action": "Réimaginer"
       },
       "delete": "Supprimer",
@@ -629,7 +629,7 @@
       "regenerating": "Génération du jour…",
       "regenerateConfirm": {
         "title": "Re-générer ce jour ?",
-        "message": "Biirbou remplace les activités de ce jour ; les autres jours ne changent pas. Vous pourrez annuler pendant {hours} h.",
+        "message": "Biirbou remplace les activités de ce jour, sauf celles que vous gardez ; les autres jours ne changent pas. Vous pourrez annuler pendant {hours} h.",
         "action": "Re-générer"
       },
       "maps": "Itinéraire du jour",
@@ -649,6 +649,10 @@
     },
     "item": {
       "impacted": "Touchée par l'imprévu : {reason}",
+      "pinned": "Gardée",
+      "pinnedHint": "Biirbou ne la modifiera ni ne la supprimera, même en re-générant le jour.",
+      "pin": "Garder l'activité {title}",
+      "unpin": "Ne plus garder l'activité {title}",
       "edit": "Modifier l'activité {title}",
       "delete": "Supprimer l'activité {title}",
       "source": "Inspiré du récit :",
@@ -664,6 +668,8 @@
       "actions": "Actions pour l'activité {title}",
       "menu": {
         "ask": "Demander à Biirbou",
+        "pin": "Garder cette activité",
+        "unpin": "Ne plus la garder",
         "edit": "Modifier",
         "delete": "Supprimer"
       },
@@ -702,6 +708,7 @@
       "saved": "Budget enregistré."
     },
     "chat": {
+      "acceptAll": "Tout accepter ({count})",
       "disruption": {
         "label": "Imprévu repéré par Biirbou",
         "day": "jour {number} ({date})",
@@ -746,7 +753,27 @@
       "quotaReached": "Biirbou a fini sa journée : il revient demain. Avec le pass voyage, il peut vous aider plus souvent sur ce voyage.",
       "quotaReachedPass": "Biirbou a fini sa journée : il revient demain !",
       "upgrade": "Pass voyage",
-      "left": "{count, plural, =0 {Biirbou a fini sa journée : il revient demain.} one {Biirbou peut encore vous aider <strong># fois</strong> aujourd'hui.} other {Biirbou peut encore vous aider <strong># fois</strong> aujourd'hui.}}"
+      "left": "{count, plural, =0 {Biirbou a fini sa journée : il revient demain.} one {Biirbou peut encore vous aider <strong># fois</strong> aujourd'hui.} other {Biirbou peut encore vous aider <strong># fois</strong> aujourd'hui.}}",
+      "preview": {
+        "open": "Voir l'avant / après",
+        "title": "Avant / après",
+        "description": "Votre planning si vous acceptez ces propositions. Rien ne change tant que vous n'avez pas accepté.",
+        "day": "Jour {number} · {date}",
+        "before": "Avant",
+        "after": "Après",
+        "empty": "Aucune activité",
+        "kept": "Gardée",
+        "changes": {
+          "added": "Ajoutée",
+          "updated": "Modifiée",
+          "moved": "Déplacée",
+          "removed": "Retirée"
+        },
+        "skipped": "{count, plural, one {Une proposition ne s'appliquera pas : son activité a été gardée ou retirée entre-temps.} other {# propositions ne s'appliqueront pas : leur activité a été gardée ou retirée entre-temps.}}",
+        "back": "Retour",
+        "close": "Fermer",
+        "accept": "{count, plural, one {Accepter la proposition} other {Tout accepter (#)}}"
+      }
     },
     "whatNow": {
       "open": "Que faire maintenant ?",

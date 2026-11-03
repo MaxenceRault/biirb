@@ -89,6 +89,8 @@ export type TripItem = {
   // Nom du lieu donné par Biirbou (temps de trajet) ; null : pas de lieu précis.
   place_name: string | null;
   source_post: { id: number; title: string; slug: string } | null;
+  // « Garder cette activité » : Biirbou ne la modifie ni ne la supprime jamais.
+  pinned: boolean;
   // Renvoyée dans If-Match : modifiée entre-temps par un autre membre → 412, écran de choix.
   version: number;
 };
@@ -117,7 +119,7 @@ export type TripDetail = {
   // Carte : villes citées dans le planning, avec leurs jours.
   map: TripMapData;
   // Dernier changement de Biirbou encore annulable (null : rien, délai passé, planning modifié depuis, ou lecteur).
-  undo: { kind: TripPlanChangeKind; created_at: string } | null;
+  undo: { kind: TripPlanChangeKind; created_at: string; count: number } | null;
   // Activités touchées par le dernier imprévu repéré par Biirbou (moins de 24 h), avec la raison.
   impacts: { item_id: number; reason: string }[];
   // Voyage en cours, jour local à la destination (null : avant, après, ou lecteur).
@@ -1037,8 +1039,10 @@ function ItemRow({
     );
   }
 
+  const togglePin = () => void mutate(`/items/${item.id}`, "PATCH", { pinned: !item.pinned }, item.version);
   const actions = [
     { icon: "sparkles" as const, label: t("item.menu.ask"), run: onAsk },
+    { icon: "pushPin" as const, label: t(item.pinned ? "item.menu.unpin" : "item.menu.pin"), run: togglePin },
     { icon: "edit" as const, label: t("item.menu.edit"), run: () => setEditingVersion(item.version) },
     { icon: "delete" as const, label: t("item.menu.delete"), run: () => void remove(), danger: true },
   ];
@@ -1075,6 +1079,12 @@ function ItemRow({
         <span className="flex items-center gap-2 font-display text-label-lg text-ink">
           <Icon name={CATEGORY_ICONS[item.category]} className="size-4.5 text-ink-soft" />
           {item.title}
+          {item.pinned && (
+            <Badge tone="accent" title={t("item.pinnedHint")}>
+              <Icon name="pushPin" className="size-3" />
+              {t("item.pinned")}
+            </Badge>
+          )}
         </span>
         {item.description && <p className="text-body-sm text-ink-soft">{item.description}</p>}
         {impact && (
@@ -1089,6 +1099,12 @@ function ItemRow({
         <>
           <div className="hidden shrink-0 flex-row gap-1 sm:flex">
             <IconButton icon="sparkles" label={t("copilot.askItem", { title: item.title })} onClick={onAsk} />
+            <IconButton
+              icon="pushPin"
+              label={t(item.pinned ? "item.unpin" : "item.pin", { title: item.title })}
+              pressed={item.pinned}
+              onClick={togglePin}
+            />
             <IconButton icon="edit" label={t("item.edit", { title: item.title })} onClick={() => setEditingVersion(item.version)} />
             <IconButton
               icon="delete"
@@ -1420,7 +1436,7 @@ function UndoBanner({ change, pending, onUndo }: { change: NonNullable<TripDetai
     <div role="status" className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-muted px-4 py-3">
       <Icon name="sparkles" className="size-4.5 shrink-0 text-accent" />
       <p className="mr-auto text-body-sm text-ink">
-        {t(`undo.messages.${change.kind}`, { when: format.relativeTime(new Date(change.created_at), now) })}{" "}
+        {t(`undo.messages.${change.kind}`, { when: format.relativeTime(new Date(change.created_at), now), count: change.count })}{" "}
         <span className="text-ink-soft">{t("undo.hint", { hours: TRIP_UNDO_HOURS })}</span>
       </p>
       <Button size="sm" variant="secondary" disabled={pending} onClick={onUndo} className="gap-1.5">

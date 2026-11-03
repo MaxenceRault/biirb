@@ -146,7 +146,8 @@ export const createTripItemSchema = z.strictObject(tripItemFields);
 
 // color : null rend la couleur de la catégorie.
 export const updateTripItemSchema = z
-  .strictObject({ ...tripItemFields, color: z.enum(TRIP_ITEM_COLORS).nullable() })
+  // pinned : « Garder cette activité » (Biirbou ne la modifie ni ne la supprime jamais).
+  .strictObject({ ...tripItemFields, color: z.enum(TRIP_ITEM_COLORS).nullable(), pinned: z.boolean() })
   .partial()
   .refine((changes) => Object.keys(changes).length > 0);
 
