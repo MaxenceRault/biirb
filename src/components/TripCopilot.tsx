@@ -389,6 +389,17 @@ export function TripCopilot({
     }
   }
 
+  // « Tout accepter » : les propositions en attente de cette réponse, en un seul changement (un seul « Annuler »).
+  async function acceptAll(message: TripMessage) {
+    const ok = await mutate(`/messages/${message.id}/accept`, "POST");
+    if (ok) {
+      setCheering(true);
+      setTimeout(() => setCheering(false), CHEER_MS);
+    }
+    // Statut de chaque proposition (une périmée a pu être refusée) : relu depuis le serveur.
+    void loadMessages();
+  }
+
   async function answer(suggestion: TripSuggestion, accepted: boolean) {
     const ok = await mutate(`/suggestions/${suggestion.id}`, "PATCH", { accepted });
     if (!ok) return loadMessages();
@@ -476,6 +487,12 @@ export function TripCopilot({
                       />
                     ))}
                   </ul>
+                )}
+                {canEdit && message.suggestions.filter((item) => item.status === "pending").length > 1 && (
+                  <Button size="sm" onClick={() => void acceptAll(message)} className="gap-1.5 self-start">
+                    <Icon name="check" className="size-4" />
+                    {t("chat.acceptAll", { count: message.suggestions.filter((item) => item.status === "pending").length })}
+                  </Button>
                 )}
               </div>
             ),
