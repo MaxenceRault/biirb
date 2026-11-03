@@ -21,18 +21,11 @@ const GLANCES = [
 
 const random = (min: number, max: number) => min + Math.random() * (max - min);
 
-// Mascotte de Biirbou : hibou plein (couleur encre, ou blanc sur fond encre avec tone="light"), bec à l'accent.
+// Mascotte de Biirbou : hibou plein encre aux yeux blancs, bec à l'accent, partout le même (sur fond foncé : le poser
+// sur un rond blanc, jamais inverser ses couleurs).
 // Décoratif : son nom est toujours écrit à côté. Animations en SVG + Motion, aucune si l'utilisateur les réduit,
 // en pause quand l'onglet n'est pas visible.
-export function Biirbou({
-  mood = "idle",
-  tone = "dark",
-  className = "size-6",
-}: {
-  mood?: BiirbouMood;
-  tone?: "dark" | "light";
-  className?: string;
-}) {
+export function Biirbou({ mood = "idle", className = "size-6" }: { mood?: BiirbouMood; className?: string }) {
   const reduce = useReducedMotion() ?? false;
   const [blink, setBlink] = useState(false);
   const [glance, setGlance] = useState({ x: 0, y: 0 });
@@ -100,9 +93,9 @@ export function Biirbou({
     };
   }, [mood, reduce]);
 
-  const bodyColor = tone === "light" ? "fill-surface" : "fill-ink";
-  const eyeColor = tone === "light" ? "fill-ink" : "fill-surface";
-  const lineColor = tone === "light" ? "stroke-ink" : "stroke-surface";
+  const bodyColor = "fill-ink";
+  const eyeColor = "fill-surface";
+  const lineColor = "stroke-surface";
   const pupil = mood === "thinking" ? { x: 2, y: -3 } : glance;
   const showOpenEyes = !asleep && mood !== "happy";
 

@@ -113,9 +113,12 @@ export function CopilotLauncher({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-full bg-ink px-5 py-3 font-display text-label-lg text-surface shadow-lg transition hover:bg-ink/90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none md:right-6 md:bottom-6"
+      className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-full bg-ink py-1.5 pr-5 pl-1.5 font-display text-label-lg text-surface shadow-lg transition hover:bg-ink/90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none md:right-6 md:bottom-6"
     >
-      <Biirbou tone="light" className="size-6" />
+      {/* Même Biirbou que partout : sur un rond blanc, jamais en couleurs inversées. */}
+      <span className="flex size-9 items-center justify-center rounded-full bg-surface">
+        <Biirbou className="size-7" />
+      </span>
       {t("copilot.launcher")}
     </button>
   );
