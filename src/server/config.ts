@@ -90,6 +90,9 @@ const envSchema = z.object({
   // Exports PDF / .ics et commandes du pass voyage, par utilisateur : un PDF se calcule sur l'unique instance.
   RATE_LIMIT_TRIP_EXPORT_MAX: count.default(20),
   RATE_LIMIT_TRIP_EXPORT_WINDOW_SECONDS: seconds.default(15 * 60),
+  // Temps de trajet d'un jour, par utilisateur : chaque affichage peut appeler OpenRouteService (quota journalier).
+  RATE_LIMIT_TRIP_TRAVEL_MAX: count.default(60),
+  RATE_LIMIT_TRIP_TRAVEL_WINDOW_SECONDS: seconds.default(15 * 60),
 }).refine((env) => env.JWT_REFRESH_SECRET !== env.JWT_SECRET, {
   path: ["JWT_REFRESH_SECRET"],
   message: "doit être différente de JWT_SECRET",
@@ -112,7 +115,7 @@ export type ServerConfig = {
   aiDailyLimitPerUser: number;
   aiDailyLimitTripPass: number;
   rateLimits: Record<
-    "login" | "loginEmail" | "refresh" | "register" | "forgotPassword" | "forgotPasswordEmail" | "resetPassword" | "locations" | "feed" | "postCreate" | "postEdit" | "postReact" | "profileView" | "profileUpdate" | "report" | "ticket" | "admin" | "comment" | "tripAi" | "tripChat" | "tripShare" | "tripExpense" | "tripExport",
+    "login" | "loginEmail" | "refresh" | "register" | "forgotPassword" | "forgotPasswordEmail" | "resetPassword" | "locations" | "feed" | "postCreate" | "postEdit" | "postReact" | "profileView" | "profileUpdate" | "report" | "ticket" | "admin" | "comment" | "tripAi" | "tripChat" | "tripShare" | "tripExpense" | "tripExport" | "tripTravel",
     RateLimit
   >;
 };
@@ -174,6 +177,7 @@ export function getConfig(): ServerConfig {
       tripShare: rateLimit(env.RATE_LIMIT_TRIP_SHARE_MAX, env.RATE_LIMIT_TRIP_SHARE_WINDOW_SECONDS),
       tripExpense: rateLimit(env.RATE_LIMIT_TRIP_EXPENSE_MAX, env.RATE_LIMIT_TRIP_EXPENSE_WINDOW_SECONDS),
       tripExport: rateLimit(env.RATE_LIMIT_TRIP_EXPORT_MAX, env.RATE_LIMIT_TRIP_EXPORT_WINDOW_SECONDS),
+      tripTravel: rateLimit(env.RATE_LIMIT_TRIP_TRAVEL_MAX, env.RATE_LIMIT_TRIP_TRAVEL_WINDOW_SECONDS),
     },
   };
   return config;
@@ -312,6 +316,45 @@ export function getAnalyticsConfig(): AnalyticsConfig | null {
   return (analytics = {
     websiteId: parsed.data.UMAMI_WEBSITE_ID,
     domain: parsed.data.APP_URL ? new URL(parsed.data.APP_URL).hostname : null,
+  });
+}
+
+// Temps de trajet (OpenRouteService, pass voyage) : clé absente ou invalide, seuls les trajets sont coupés.
+// Plafonds de tout le site, sous le quota du plan gratuit (3 000 recherches et 500 calculs par jour ; 100 et 40 par
+// minute) : 10 % de marge, les compteurs étant en mémoire (remis à zéro au redémarrage, pas chez OpenRouteService).
+const routingSchema = z.object({
+  ORS_API_KEY: z.string().regex(/^[A-Za-z0-9+/=_-]{20,200}$/),
+  ORS_GEOCODE_DAILY_MAX: count.default(2_700),
+  ORS_GEOCODE_MINUTE_MAX: count.default(90),
+  ORS_MATRIX_DAILY_MAX: count.default(450),
+  ORS_MATRIX_MINUTE_MAX: count.default(36),
+});
+
+export type RoutingBudget = { daily: number; perMinute: number };
+export type RoutingConfig = { apiKey: string; budget: { geocode: RoutingBudget; matrix: RoutingBudget } };
+
+let routing: RoutingConfig | null | undefined;
+
+export function getRoutingConfig(): RoutingConfig | null {
+  if (routing !== undefined) return routing;
+
+  const { ORS_API_KEY, ORS_GEOCODE_DAILY_MAX, ORS_GEOCODE_MINUTE_MAX, ORS_MATRIX_DAILY_MAX, ORS_MATRIX_MINUTE_MAX } = process.env;
+  if (!ORS_API_KEY) return (routing = null);
+
+  const parsed = routingSchema.safeParse({ ORS_API_KEY, ORS_GEOCODE_DAILY_MAX, ORS_GEOCODE_MINUTE_MAX, ORS_MATRIX_DAILY_MAX, ORS_MATRIX_MINUTE_MAX });
+  if (!parsed.success) {
+    // Noms des variables seulement, jamais la valeur de la clé.
+    const names = parsed.error.issues.map((issue) => issue.path.join(".")).join(", ");
+    logError("config", `invalid routing env (travel times disabled): ${names}`);
+    return (routing = null);
+  }
+  const env = parsed.data;
+  return (routing = {
+    apiKey: env.ORS_API_KEY,
+    budget: {
+      geocode: { daily: env.ORS_GEOCODE_DAILY_MAX, perMinute: env.ORS_GEOCODE_MINUTE_MAX },
+      matrix: { daily: env.ORS_MATRIX_DAILY_MAX, perMinute: env.ORS_MATRIX_MINUTE_MAX },
+    },
   });
 }
 

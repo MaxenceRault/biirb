@@ -75,5 +75,5 @@ jobs:
             --min-instances=0 \
             --max-instances=1 \
             --set-env-vars="CLOUD_SQL_INSTANCE=$PROJECT_ID:$REGION:biirb-db1,DB_NAME=brb,DB_USER=brb-run@$PROJECT_ID.iam,GCP_PROJECT_ID=$PROJECT_ID,VERTEX_LOCATION=$REGION,TRUSTED_PROXY_HOPS=1,APP_URL=$APP_URL,BMC_PAGE_URL=$BMC_PAGE_URL,BMC_TRIP_PASS_URL=$BMC_TRIP_PASS_URL,BMC_TRIP_PASS_EXTRA_ID=$BMC_TRIP_PASS_EXTRA_ID,SMTP_USER=$SMTP_USER,UMAMI_WEBSITE_ID=$UMAMI_WEBSITE_ID" \
-            --set-secrets="JWT_SECRET=brb-jwt-secret:latest,JWT_REFRESH_SECRET=brb-jwt-refresh-secret:latest,BMC_WEBHOOK_SECRET=brb-bmc-webhook-secret:latest,SMTP_PASSWORD=brb-smtp-password:latest" \
+            --set-secrets="JWT_SECRET=brb-jwt-secret:latest,JWT_REFRESH_SECRET=brb-jwt-refresh-secret:latest,BMC_WEBHOOK_SECRET=brb-bmc-webhook-secret:latest,SMTP_PASSWORD=brb-smtp-password:latest,ORS_API_KEY=brb-ors-api-key:latest" \
             --quiet

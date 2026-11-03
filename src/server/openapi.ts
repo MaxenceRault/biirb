@@ -225,6 +225,12 @@ const tripDetail = {
       description: "Dernier changement de Biirbou annulable (POST /trips/{id}/undo) ; null : rien, délai de 24 h passé, planning modifié depuis, ou lecteur",
       properties: { kind: { type: "string", enum: ["suggestion", "regenerate", "regenerate_day"] }, created_at: { type: "string", format: "date-time" } },
     },
+    live: {
+      type: "object",
+      nullable: true,
+      description: "Voyage en cours (bouton « Que faire maintenant ? ») : jour local à la destination ; null avant, après, ou lecteur",
+      properties: { day: { type: "string", format: "date" }, dayNumber: { type: "integer" } },
+    },
     aiQuota: {
       type: "object",
       description: "Requêtes IA du jour de l'utilisateur sur ce voyage (limit null : illimité, admin ; plafond plus haut avec le pass)",
@@ -645,6 +651,44 @@ export function buildOpenApiDocument() {
           parameters: [tripIdParam, { name: "day", in: "path", required: true, schema: { type: "string", format: "date" } }],
         },
       },
+      "/trips/{id}/days/{day}/travel": {
+        get: {
+          ...tripRoute("Temps de trajet entre les activités d'un jour (pass voyage)", {
+            description:
+              "OpenRouteService (OpenStreetMap) : à pied, et en voiture au-delà de 2 km ; pas de transports en commun. Chaque lieu est " +
+              "cherché une fois (nom donné par Biirbou, sinon titre) puis gardé ; un transport coupe la journée. Lecteur compris. " +
+              "unlocated : lieu introuvable ; pending : pas encore cherché (8 recherches par appel, la suite au prochain). " +
+              "deferred : plafond du site atteint (ORS_*_MAX, réserve pour le jour en cours d'un voyage en cours) ou " +
+              "OpenRouteService indisponible : les trajets en cache sont renvoyés, les autres attendent le prochain affichage.",
+            ok: {
+              200: json("Trajets du jour", {
+                type: "object",
+                properties: {
+                  legs: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        fromItemId: { type: "integer" },
+                        toItemId: { type: "integer" },
+                        walk: { type: "object", nullable: true, properties: { minutes: { type: "integer" }, meters: { type: "integer" } } },
+                        drive: { type: "object", nullable: true, properties: { minutes: { type: "integer" }, meters: { type: "integer" } } },
+                      },
+                    },
+                  },
+                  unlocated: { type: "array", items: { type: "integer" } },
+                  pending: { type: "array", items: { type: "integer" } },
+                  deferred: { type: "boolean" },
+                },
+              }),
+              402: passRequired,
+              429: tooManyRequests,
+              503: error("Temps de trajet coupés (clé OpenRouteService absente)", ["TRAVEL_UNAVAILABLE"]),
+            },
+          }),
+          parameters: [tripIdParam, { name: "day", in: "path", required: true, schema: { type: "string", format: "date" } }],
+        },
+      },
       "/trips/current": {
         get: {
           tags: ["Voyages"],
@@ -707,7 +751,10 @@ export function buildOpenApiDocument() {
             "Limitée au voyage et à sa destination (hors sujet : off_topic, aucune proposition). Message traité comme " +
             "une donnée non fiable. Les activités proposées restent en attente jusqu'à la réponse de l'utilisateur. " +
             "clientTime (heure de l'appareil avec décalage, ignorée si elle s'écarte de plus de 15 min de l'heure du serveur) : " +
-            "Biirbou sait quel jour du voyage on est. Le prompt contient aussi le budget, les dépenses et la mémoire du voyage, mise à jour après l'échange.",
+            "Biirbou sait quel jour du voyage on est ; pendant le voyage, l'heure de la destination (fuseau de l'étape du jour) prime. " +
+            "position (arrondie à 2 décimales par le serveur) ou place (« Je suis à… », l'un ou l'autre) : utilisés " +
+            "seulement pendant le voyage, jamais enregistrés. energy (tired, motivated, relaxed) : adapte les propositions, " +
+            "jamais enregistrée. Le prompt contient aussi le budget, les dépenses et la mémoire du voyage, mise à jour après l'échange.",
         }),
       },
       "/trips/{id}/suggestions/{suggestionId}": {

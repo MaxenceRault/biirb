@@ -28,7 +28,9 @@ import {
   type TripItem,
 } from "@/components/TripPlanner";
 import { currencyDecimals } from "@/schemas/trip-expense.schema";
-import { TRIP_MEMORY_MAX, TRIP_MESSAGE_MAX } from "@/schemas/trip.schema";
+import { FilterBar, FilterChip } from "@/components/ui/FilterChip";
+import { ENERGY_ICONS, WhatNowDialog } from "@/components/TripWhatNow";
+import { TRIP_ENERGY_LEVELS, TRIP_MEMORY_MAX, TRIP_MESSAGE_MAX, type TripEnergyLevel, type TripMessageContext } from "@/schemas/trip.schema";
 
 type TripSuggestion = Omit<TripItem, "id" | "color" | "origin"> & {
   id: number;
@@ -51,7 +53,8 @@ type Mutate = (path: string, method: string, body?: unknown) => Promise<boolean>
 
 // Ce qui ouvre le panneau : un message pré-rempli (activité, budget) ou le choix d'un imprévu pour un jour.
 // nonce : rouvrir avec la même demande la réapplique.
-export type CopilotAsk = { kind: "chat"; draft?: string } | { kind: "adapt"; day: string };
+// whatNow : « Que faire maintenant ? » (voyage en cours).
+export type CopilotAsk = { kind: "chat"; draft?: string } | { kind: "adapt"; day: string } | { kind: "whatNow" };
 export type CopilotRequest = CopilotAsk & { nonce: number };
 
 // Motifs d'imprévus proposés par « Adapter mon voyage » (textes dans messages/fr.json → Planner.copilot.adapt).
@@ -83,7 +86,14 @@ export function CopilotCard({ detail, onOpen }: { detail: TripDetail; onOpen: (r
         <p className="text-body-sm text-ink-soft">{t(`copilot.cardText.${moment.kind}`)}</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => onOpen({ kind: "chat" })} className="gap-1.5">
+        {/* Pendant le voyage (jour de la destination, calculé par le serveur ; null pour un lecteur). */}
+        {detail.live && (
+          <Button size="sm" onClick={() => onOpen({ kind: "whatNow" })} className="gap-1.5">
+            <Icon name="explore" className="size-4" />
+            {t("whatNow.open")}
+          </Button>
+        )}
+        <Button size="sm" variant={detail.live ? "secondary" : "primary"} onClick={() => onOpen({ kind: "chat" })} className="gap-1.5">
           <Icon name="send" className="size-4" />
           {t("copilot.open")}
         </Button>
@@ -152,7 +162,12 @@ export function TripCopilot({
   const [messages, setMessages] = useState<TripMessage[] | null>(null);
   const [draft, setDraft] = useState("");
   const [adaptDay, setAdaptDay] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
+  // Énergie choisie pour adapter la journée : envoyée avec le message, puis oubliée.
+  const [adaptEnergy, setAdaptEnergy] = useState<TripEnergyLevel | null>(null);
+  const [whatNow, setWhatNow] = useState(false);
+  // Message en cours d'envoi (affiché tout de suite, avant la réponse de Biirbou).
+  const [pending, setPending] = useState<string | null>(null);
+  const sending = pending !== null;
   const [error, setError] = useState<PlannerError | null>(null);
   const panel = useRef<HTMLElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -184,7 +199,9 @@ export function TripCopilot({
   if (request && request.nonce !== appliedNonce) {
     setAppliedNonce(request.nonce);
     setAdaptDay(request.kind === "adapt" ? request.day : null);
+    setAdaptEnergy(null);
     if (request.kind === "chat" && request.draft) setDraft(request.draft);
+    if (request.kind === "whatNow") setWhatNow(true);
   }
 
   // Focus dans le panneau à l'ouverture, rendu au bouton qui l'a ouvert à la fermeture.
@@ -202,45 +219,64 @@ export function TripCopilot({
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
   }, [messages, sending, open]);
 
-  async function send() {
-    const content = draft.trim();
-    if (content.length < 2 || sending) return;
-    if (quotaReached) return passActive ? undefined : onUpsell("ai");
+  // context : énergie, position ou lieu (« Que faire maintenant ? », « Adapter ma journée »), envoyés avec ce message seulement.
+  async function send(content: string, context: Omit<TripMessageContext, "clientTime"> = {}) {
+    if (content.length < 2 || sending) return false;
+    if (quotaReached) {
+      if (!passActive) onUpsell("ai");
+      return false;
+    }
 
-    setSending(true);
+    setPending(content);
     setError(null);
     const result = await apiFetch<{ messages: TripMessage[] }>(`${basePath}/messages`, {
       method: "POST",
-      body: { content, clientTime: clientTimeNow() },
+      body: { content, clientTime: clientTimeNow(), ...context },
     });
-    setSending(false);
+    setPending(null);
 
     if ("data" in result) {
       setMessages(result.data.messages);
-      setDraft("");
-      setAdaptDay(null);
       setCounter({ base: aiQuota.used, sent: used - aiQuota.used + 1 });
       void onReload();
-      return;
+      return true;
     }
-    if (result.error === "UNAUTHORIZED") return router.replace("/login");
+    if (result.error === "UNAUTHORIZED") {
+      router.replace("/login");
+      return false;
+    }
     if (result.error === "DAILY_LIMIT_REACHED" && aiQuota.limit !== null) setCounter({ base: aiQuota.used, sent: aiQuota.limit - aiQuota.used });
     // Sans pass : le pass est proposé à la place du message d'erreur.
     if (!passActive && (result.error === "DAILY_LIMIT_REACHED" || result.error === "CHAT_LIMIT_REACHED")) {
-      return onUpsell(result.error === "DAILY_LIMIT_REACHED" ? "ai" : "chat");
+      onUpsell(result.error === "DAILY_LIMIT_REACHED" ? "ai" : "chat");
+      return false;
     }
     setError(plannerError(result.error));
+    return false;
+  }
+
+  async function sendDraft() {
+    const sent = await send(draft.trim(), adaptDay && adaptEnergy ? { energy: adaptEnergy } : {});
+    if (!sent) return;
+    setDraft("");
+    setAdaptDay(null);
+    setAdaptEnergy(null);
+  }
+
+  function openWhatNow() {
+    if (quotaReached && !passActive) return onUpsell("ai");
+    setWhatNow(true);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void send();
+    void sendDraft();
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      void send();
+      void sendDraft();
     }
   }
 
@@ -273,7 +309,8 @@ export function TripCopilot({
       tabIndex={-1}
       aria-label={t("copilot.panelLabel")}
       onKeyDown={(event) => {
-        if (event.key === "Escape") onClose();
+        // Échap dans une fenêtre ouverte depuis le panneau (« Que faire maintenant ? ») ne ferme que cette fenêtre.
+        if (event.key === "Escape" && !(event.target instanceof Element && event.target.closest("dialog"))) onClose();
       }}
       className={`fixed inset-y-0 right-0 z-50 w-full flex-col border-l ${open ? "flex" : "hidden"} border-line bg-surface shadow-lg focus-visible:outline-none sm:w-[26rem]`}
     >
@@ -343,7 +380,7 @@ export function TripCopilot({
           {sending && (
             <>
               <p className="max-w-[85%] self-end rounded-lg bg-ink px-3 py-2 text-body-sm whitespace-pre-line text-surface">
-                {draft.trim()}
+                {pending}
               </p>
               <div className="self-start rounded-lg bg-surface-muted px-3 py-2">
                 <ReasoningText phrases={t.raw("chat.reasoning") as string[]} />
@@ -378,7 +415,23 @@ export function TripCopilot({
                 </li>
               ))}
             </ul>
+            <FilterBar label={t("whatNow.energy.label")}>
+              {TRIP_ENERGY_LEVELS.map((level) => (
+                <FilterChip key={level} active={adaptEnergy === level} onClick={() => setAdaptEnergy((current) => (current === level ? null : level))}>
+                  <Icon name={ENERGY_ICONS[level]} className="size-4" />
+                  {t(`whatNow.energy.${level}`)}
+                </FilterChip>
+              ))}
+            </FilterBar>
           </div>
+        )}
+
+        {/* Pendant le voyage : aussi depuis le panneau (ouvert depuis n'importe quel onglet). */}
+        {canEdit && detail.live && remaining > 0 && !adaptDay && (
+          <Button size="sm" variant="secondary" onClick={openWhatNow} disabled={sending} className="gap-1.5 self-start">
+            <Icon name="explore" className="size-4" />
+            {t("whatNow.open")}
+          </Button>
         )}
 
         {error && <FormError>{t(`errors.${error}`)}</FormError>}
@@ -433,6 +486,18 @@ export function TripCopilot({
           </div>
         )}
       </div>
+
+      {detail.live && (
+        <WhatNowDialog
+          open={whatNow}
+          dayNumber={detail.live.dayNumber}
+          onClose={() => setWhatNow(false)}
+          onAsk={(context) => {
+            setWhatNow(false);
+            void send(t("whatNow.message"), context);
+          }}
+        />
+      )}
     </aside>
   );
 }
