@@ -32,6 +32,7 @@ import {
 import { currencyDecimals } from "@/schemas/trip-expense.schema";
 import { FilterBar, FilterChip } from "@/components/ui/FilterChip";
 import { ENERGY_ICONS, WhatNowDialog } from "@/components/TripWhatNow";
+import { TripChangePreview } from "@/components/TripChangePreview";
 import {
   TRIP_DISRUPTIONS,
   TRIP_ENERGY_LEVELS,
@@ -235,6 +236,8 @@ export function TripCopilot({
   const [adaptEnergy, setAdaptEnergy] = useState<TripEnergyLevel | null>(null);
   const [adaptReason, setAdaptReason] = useState<TripDisruption | null>(null);
   const [whatNow, setWhatNow] = useState(false);
+  // Réponse dont on regarde l'avant / après (#12).
+  const [previewId, setPreviewId] = useState<number | null>(null);
   // Message en cours d'envoi (affiché tout de suite, avant la réponse de Biirbou).
   const [pending, setPending] = useState<string | null>(null);
   const sending = pending !== null;
@@ -389,6 +392,9 @@ export function TripCopilot({
     }
   }
 
+  const previewMessage = messages?.find((message) => message.id === previewId) ?? null;
+  const previewPending = previewMessage?.suggestions.filter((item) => item.status === "pending") ?? [];
+
   // « Tout accepter » : les propositions en attente de cette réponse, en un seul changement (un seul « Annuler »).
   async function acceptAll(message: TripMessage) {
     const ok = await mutate(`/messages/${message.id}/accept`, "POST");
@@ -488,11 +494,19 @@ export function TripCopilot({
                     ))}
                   </ul>
                 )}
-                {canEdit && message.suggestions.filter((item) => item.status === "pending").length > 1 && (
-                  <Button size="sm" onClick={() => void acceptAll(message)} className="gap-1.5 self-start">
-                    <Icon name="check" className="size-4" />
-                    {t("chat.acceptAll", { count: message.suggestions.filter((item) => item.status === "pending").length })}
-                  </Button>
+                {message.suggestions.some((item) => item.status === "pending") && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {canEdit && message.suggestions.filter((item) => item.status === "pending").length > 1 && (
+                      <Button size="sm" onClick={() => void acceptAll(message)} className="gap-1.5">
+                        <Icon name="check" className="size-4" />
+                        {t("chat.acceptAll", { count: message.suggestions.filter((item) => item.status === "pending").length })}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="secondary" onClick={() => setPreviewId(message.id)} className="gap-1.5">
+                      <Icon name="visibility" className="size-4" />
+                      {t("chat.preview.open")}
+                    </Button>
+                  </div>
                 )}
               </div>
             ),
@@ -625,6 +639,24 @@ export function TripCopilot({
             setWhatNow(false);
             void send(t("whatNow.message"), context);
           }}
+        />
+      )}
+
+      {previewMessage && (
+        <TripChangePreview
+          open
+          onClose={() => setPreviewId(null)}
+          items={detail.items}
+          days={days}
+          suggestions={previewPending}
+          onAccept={
+            canEdit
+              ? () => {
+                  setPreviewId(null);
+                  void (previewPending.length === 1 ? answer(previewPending[0], true) : acceptAll(previewMessage));
+                }
+              : undefined
+          }
         />
       )}
     </aside>
