@@ -949,6 +949,71 @@
         "edit": "Corriger",
         "clear": "Effacer"
       }
+    },
+    "conflict": {
+      "title": "Modifié par un autre membre",
+      "description": {
+        "item": "Pendant que vous modifiiez cette activité, un autre membre du voyage l'a changée. Quelle version garder ?",
+        "delete": "Un autre membre a modifié cette activité depuis que vous l'avez vue. La supprimer quand même ?",
+        "trip": "Un autre membre a changé le titre ou le budget pendant votre saisie. Quelle version garder ?"
+      },
+      "theirs": "Version enregistrée",
+      "mine": "Votre version",
+      "keepTheirs": "Garder la version enregistrée",
+      "keepMine": "Garder ma version",
+      "deleteMine": "Supprimer cette activité",
+      "deleteAnyway": "Supprimer quand même",
+      "color": "Couleur : {color}"
+    },
+    "notify": {
+      "open": "Notifications",
+      "title": "Être prévenu des changements",
+      "intro": "Quand un autre membre modifie ce voyage. Ces changements apparaissent toujours dans la cloche en haut de la page.",
+      "push": "Sur cet appareil (notification du navigateur)",
+      "pushHint": "Votre navigateur vous demandera l'autorisation. À activer sur chacun de vos appareils.",
+      "pushOff": "Pas encore disponible sur Biirb.",
+      "pushUnsupported": "Ce navigateur ne gère pas les notifications. Sur iPhone, installez d'abord Biirb sur l'écran d'accueil.",
+      "email": "Par email",
+      "emailHint": "À l'adresse de votre compte. Un email par changement, sans détail : seulement le lien vers le voyage.",
+      "emailOff": "Les emails sont indisponibles pour le moment.",
+      "problems": {
+        "denied": "Notifications bloquées par le navigateur : autorisez-les pour Biirb dans les réglages du site, puis réessayez.",
+        "unavailable": "Notifications du navigateur indisponibles ici (elles fonctionnent sur le site en ligne).",
+        "error": "Réglage non enregistré. Vérifiez votre connexion puis réessayez."
+      }
+    }
+  },
+  "Notifications": {
+    "title": "Notifications",
+    "clear": "Tout effacer",
+    "open": "{count, plural, =0 {Notifications} one {Notifications, # non lue} other {Notifications, # non lues}}",
+    "empty": "Rien de nouveau. Les changements faits par les autres membres de vos voyages apparaîtront ici.",
+    "unread": "Non lue :",
+    "someone": "Un membre",
+    "kinds": {
+      "plan_regenerated": "{actor} a fait réimaginer tout le planning de « {trip} » par Biirbou.",
+      "day_regenerated": "{actor} a fait réimaginer la journée du {detail} dans « {trip} ».",
+      "plan_undone": "{actor} a annulé le dernier changement de Biirbou dans « {trip} ».",
+      "suggestion_accepted": "{actor} a accepté une proposition de Biirbou dans « {trip} ».",
+      "item_added": "{actor} a ajouté « {detail} » à « {trip} ».",
+      "item_updated": "{actor} a modifié « {detail} » dans « {trip} ».",
+      "item_deleted": "{actor} a retiré « {detail} » de « {trip} ».",
+      "trip_updated": "{actor} a modifié le titre ou le budget de « {trip} »."
+    }
+  },
+  "NotificationEmail": {
+    "subject": "Biirb : vous avez une nouvelle notification",
+    "body": "Bonjour,\n\nVous avez une nouvelle notification sur Biirb.\n{change}\n\nVoir le voyage : {link}\n\nVous recevez cet email car vous avez choisi d'être prévenu par email pour ce voyage. Pour ne plus le recevoir : bouton « Notifications » sur la page du voyage.\n\nL'équipe Biirb",
+    "bodyNoLink": "Bonjour,\n\nVous avez une nouvelle notification sur Biirb.\n{change}\n\nOuvrez Biirb pour la voir.\n\nVous recevez cet email car vous avez choisi d'être prévenu par email pour ce voyage. Pour ne plus le recevoir : bouton « Notifications » sur la page du voyage.\n\nL'équipe Biirb",
+    "kinds": {
+      "plan_regenerated": "Un membre a fait réimaginer tout le planning d'un de vos voyages par Biirbou.",
+      "day_regenerated": "Un membre a fait réimaginer une journée d'un de vos voyages.",
+      "plan_undone": "Un membre a annulé le dernier changement de Biirbou dans un de vos voyages.",
+      "suggestion_accepted": "Un membre a accepté une proposition de Biirbou dans un de vos voyages.",
+      "item_added": "Un membre a ajouté une activité à un de vos voyages.",
+      "item_updated": "Un membre a modifié une activité d'un de vos voyages.",
+      "item_deleted": "Un membre a retiré une activité d'un de vos voyages.",
+      "trip_updated": "Un membre a modifié le titre ou le budget d'un de vos voyages."
     }
   },
   "DateRangePicker": {

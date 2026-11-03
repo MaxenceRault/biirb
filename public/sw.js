@@ -21,6 +21,39 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Notification d'un voyage partagé (push web, src/server/infra/webPush.ts) : texte affiché tel quel par le système.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+  event.waitUntil(
+    self.registration.showNotification(typeof data.title === "string" ? data.title : "Biirb", {
+      body: typeof data.body === "string" ? data.body : "",
+      icon: "/icons/icon-192.png",
+      data: { url: plannerPath(data.url) },
+    }),
+  );
+});
+
+// Clic : onglet déjà ouvert sur le voyage, sinon nouvel onglet. Jamais une adresse hors du planificateur.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const path = plannerPath(event.notification.data?.url);
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((client) => new URL(client.url).pathname === path);
+      return open ? open.focus() : self.clients.openWindow(path);
+    }),
+  );
+});
+
+function plannerPath(value) {
+  return typeof value === "string" && /^\/planner\/[0-9a-f-]{36}$/.test(value) ? value : "/planner";
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;

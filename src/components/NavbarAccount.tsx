@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { buttonClassName } from "@/components/ui/Button";
 import { FormError } from "@/components/ui/FormError";
 import { Icon } from "@/components/ui/Icon";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useDismiss } from "@/client/hooks/useDismiss";
 import {
   getSessionSnapshot,
@@ -35,7 +36,12 @@ export function NavbarAccount() {
     );
   }
 
-  return <AccountMenu user={user} />;
+  return (
+    <div className="flex items-center gap-1">
+      <NotificationBell />
+      <AccountMenu user={user} />
+    </div>
+  );
 }
 
 function AccountMenu({ user }: { user: SessionUser }) {
