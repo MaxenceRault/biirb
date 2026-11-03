@@ -58,9 +58,9 @@ export type CopilotAsk = { kind: "chat"; draft?: string } | { kind: "adapt"; day
 export type CopilotRequest = CopilotAsk & { nonce: number };
 
 const CHEER_MS = 1_500;
-// Clic sur le bouton flottant : écrasement, puis le bouton grandit et devient le panneau (Motion, même layoutId) ;
-// à la fermeture, le panneau se referme dans le bouton.
-const PRESS_MS = 140;
+// Bouton flottant : écrasé à l'appui, gonflé au-delà de HOLD_MS ; au clic il grandit et devient le panneau (Motion, même
+// layoutId), qui se referme dans le bouton à la fermeture.
+const HOLD_MS = 150;
 const SHELL_LAYOUT_ID = "biirbou-copilot";
 const MORPH = { type: "spring", stiffness: 300, damping: 32 } as const;
 
@@ -121,15 +121,24 @@ export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: (
   const t = useTranslations("Planner");
   const reduce = useReducedMotion() ?? false;
   const [hovered, setHovered] = useState(false);
+  // Appui : il s'écrase aussitôt ; maintenu plus de HOLD_MS, il gonfle. Le clic (relâché sur le bouton) ouvre le
+  // panneau tout de suite : aucune attente entre le geste et la transformation.
   const [pressed, setPressed] = useState(false);
-  // Appui maintenu : il gonfle ; relâché sur le bouton, le clic l'ouvre (écrasement puis vol).
   const [holding, setHolding] = useState(false);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // Il s'écrase un instant, puis le bouton s'ouvre en panneau ; sans animation : tout de suite.
-  function open() {
-    if (reduce) return onOpen();
+  function press() {
     setPressed(true);
-    setTimeout(onOpen, PRESS_MS);
+    holdTimer.current = setTimeout(() => {
+      setPressed(false);
+      setHolding(true);
+    }, HOLD_MS);
+  }
+
+  function release() {
+    clearTimeout(holdTimer.current);
+    setPressed(false);
+    setHolding(false);
   }
 
   return (
@@ -139,15 +148,15 @@ export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: (
       // Rayon en style (et non en classe) : Motion le garde rond pendant la transformation en panneau.
       style={{ borderRadius: 9999 }}
       type="button"
-      onClick={open}
+      onClick={onOpen}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => {
         setHovered(false);
-        setHolding(false);
+        release();
       }}
-      onPointerDown={() => setHolding(true)}
-      onPointerUp={() => setHolding(false)}
-      onPointerCancel={() => setHolding(false)}
+      onPointerDown={press}
+      onPointerUp={release}
+      onPointerCancel={release}
       // Appui long sur mobile : pas de menu contextuel ni de sélection.
       onContextMenu={(event) => event.preventDefault()}
       onFocus={() => setHovered(true)}
@@ -160,7 +169,7 @@ export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: (
           oops={oops}
           hovered={hovered}
           pressed={pressed}
-          inflating={holding && !pressed}
+          inflating={holding}
           followPointer
           className="size-16 drop-shadow-md transition-[filter] duration-300 group-hover:drop-shadow-none group-focus-visible:drop-shadow-none"
         />
@@ -364,7 +373,7 @@ export function TripCopilot({
         className="flex min-h-0 flex-1 flex-col"
         initial={reduce ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.12, duration: 0.2 }}
+        transition={{ delay: 0.06, duration: 0.18 }}
       >
       <div className="flex items-start justify-between gap-3 border-b border-line px-5 pt-5 pb-4">
         <div className="flex min-w-0 flex-col gap-0.5">
