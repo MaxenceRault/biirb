@@ -483,6 +483,7 @@
       "deferred": "Certains temps de trajet arriveront plus tard."
     },
     "item": {
+      "impacted": "Touchée par l'imprévu : {reason}",
       "edit": "Modifier l'activité {title}",
       "delete": "Supprimer l'activité {title}",
       "source": "Inspiré du récit :",
@@ -536,6 +537,12 @@
       "saved": "Budget enregistré."
     },
     "chat": {
+      "disruption": {
+        "label": "Imprévu repéré par Biirbou",
+        "day": "jour {number} ({date})",
+        "impacted": "Activités touchées",
+        "none": "Aucune activité prévue n'est touchée."
+      },
       "empty": "Ex. « Je veux faire du parachute », « Un resto typique pas cher le jour 2 ? », « Que faire s'il pleut ? »",
       "label": "Message pour Biirbou",
       "placeholder": "Votre question sur ce voyage…",

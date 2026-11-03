@@ -57,6 +57,16 @@ type TripMessage = {
   off_topic: boolean;
   author: { id: string; display_name: string } | null;
   suggestions: TripSuggestion[];
+  disruption: SpottedDisruption | null;
+};
+
+// Imprévu repéré par Biirbou dans sa réponse (#06, #08) et activités touchées à ce moment-là.
+type SpottedDisruption = {
+  summary: string;
+  duration: string | null;
+  days: string[];
+  // item_id null : activité supprimée depuis (copie de ce qu'elle était).
+  impacted: { item_id: number | null; day: string; start_time: string; title: string; reason: string }[];
 };
 
 type Mutate = (path: string, method: string, body?: unknown) => Promise<boolean>;
@@ -450,6 +460,7 @@ export function TripCopilot({
                 >
                   {message.off_topic ? t("chat.offTopic") : message.content}
                 </p>
+                {message.disruption && <DisruptionCard disruption={message.disruption} days={days} />}
                 {message.suggestions.length > 0 && (
                   <ul className="flex flex-col gap-2" aria-label={t("chat.suggestions")}>
                     {message.suggestions.map((suggestion) => (
@@ -799,5 +810,41 @@ function SuggestionCard({
         </span>
       )}
     </li>
+  );
+}
+
+// Ce que Biirbou a compris de l'imprévu : quoi, combien de temps, quels jours et quelles activités (avec la raison).
+function DisruptionCard({ disruption, days }: { disruption: SpottedDisruption; days: string[] }) {
+  const t = useTranslations("Planner");
+  const format = useFormatter();
+  const dayLabel = (day: string) =>
+    t("chat.disruption.day", { number: days.indexOf(day) + 1, date: format.dateTime(parseDay(day), { day: "numeric", month: "short" }) });
+  const when = [disruption.days.map(dayLabel).join(", "), disruption.duration].filter(Boolean).join(" · ");
+
+  return (
+    <section aria-label={t("chat.disruption.label")} className="flex flex-col gap-2 rounded-lg border border-line bg-surface px-3 py-2.5">
+      <div className="flex items-start gap-2">
+        <Icon name="warning" className="mt-0.5 size-4 shrink-0 text-accent" />
+        <div className="flex min-w-0 flex-col">
+          <p className="font-display text-label-lg text-ink first-letter:uppercase">{disruption.summary}</p>
+          {when && <p className="text-label-sm text-ink-soft">{when}</p>}
+        </div>
+      </div>
+      {disruption.impacted.length > 0 ? (
+        <ul aria-label={t("chat.disruption.impacted")} className="flex flex-col gap-1 border-t border-line pt-2">
+          {disruption.impacted.map((item) => (
+            <li key={`${item.day}-${item.start_time}-${item.title}`} className="text-body-sm text-ink">
+              <span className="font-display text-label-md">
+                {disruption.days.length > 1 && `${dayLabel(item.day)} · `}
+                {item.start_time} {item.title}
+              </span>
+              <span className="text-ink-soft"> — {item.reason}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="border-t border-line pt-2 text-body-sm text-ink-soft">{t("chat.disruption.none")}</p>
+      )}
+    </section>
   );
 }

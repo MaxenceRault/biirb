@@ -137,6 +137,21 @@ export type TripMessageRow = {
   // Messages de l'utilisateur : qui l'a écrit (discussion partagée entre les membres).
   author: { id: string; display_name: string } | null;
   suggestions: TripSuggestionRow[];
+  // Réponse de Biirbou : imprévu repéré (null : aucun) et activités touchées telles qu'elles étaient (item_id null :
+  // supprimée depuis).
+  disruption: {
+    summary: string;
+    duration: string | null;
+    days: string[];
+    impacted: { item_id: number | null; day: string; start_time: string; title: string; reason: string }[];
+  } | null;
+};
+
+export type TripDisruptionRecord = {
+  summary: string;
+  duration: string | null;
+  days: string[];
+  impacted: { item_id: number; reason: string }[];
 };
 
 export type NewTripExchange = {
@@ -149,6 +164,7 @@ export type NewTripExchange = {
     action: TripSuggestionAction;
     target_item_id: number | null;
   })[];
+  disruption?: TripDisruptionRecord | null;
 };
 
 // Noms de colonnes issus de cette liste, jamais de l'entrée utilisateur.
@@ -475,11 +491,37 @@ export async function findTripMessages(tripId: number): Promise<TripMessageRow[]
           left join trip_item t on t.id = s.target_item_id
           where s.message_id = m.id),
          '[]'
-       ) as suggestions
+       ) as suggestions,
+       case when m.disruption_summary is null then null else json_build_object(
+         'summary', m.disruption_summary,
+         'duration', m.disruption_duration,
+         'days', (select coalesce(json_agg(to_char(d, 'YYYY-MM-DD') order by d), '[]') from unnest(m.disruption_days) d),
+         'impacted', (select coalesce(json_agg(json_build_object(
+             'item_id', x.item_id, 'day', to_char(x.day, 'YYYY-MM-DD'), 'start_time', to_char(x.start_time, 'HH24:MI'), 'title', x.title,
+             'reason', x.reason
+           ) order by x.day, x.start_time, x.id), '[]')
+          from trip_message_impact x
+          where x.message_id = m.id)
+       ) end as disruption
      from trip_message m left join users u on u.id = m.author_id
      where m.trip_id = $1
      order by m.id`,
     [tripId],
+  );
+  return rows;
+}
+
+// Activités touchées par le dernier imprévu repéré par Biirbou, s'il date de moins de `hours` heures (surlignées dans
+// le planning).
+export async function findRecentImpacts(tripId: number, hours: number): Promise<{ item_id: number; reason: string }[]> {
+  const db = await getDb();
+  const { rows } = await db.query<{ item_id: number; reason: string }>(
+    `select x.item_id, x.reason from trip_message_impact x
+     where x.item_id is not null and x.message_id = (
+       select id from trip_message
+       where trip_id = $1 and role = 'assistant' and disruption_summary is not null and created_at > now() - make_interval(hours => $2)
+       order by id desc limit 1)`,
+    [tripId, hours],
   );
   return rows;
 }
@@ -502,10 +544,21 @@ export async function insertTripExchange(tripId: number, authorId: string, excha
       `insert into trip_message (trip_id, role, content, off_topic, author_id) values ($1, 'user', $2, $3, $4)`,
       [tripId, exchange.user_content, exchange.off_topic, authorId],
     );
+    const { disruption } = exchange;
     const { rows } = await client.query<{ id: number }>(
-      `insert into trip_message (trip_id, role, content, off_topic) values ($1, 'assistant', $2, $3) returning id`,
-      [tripId, exchange.assistant_content, exchange.off_topic],
+      `insert into trip_message (trip_id, role, content, off_topic, disruption_summary, disruption_duration, disruption_days)
+       values ($1, 'assistant', $2, $3, $4, $5, $6::date[]) returning id`,
+      [tripId, exchange.assistant_content, exchange.off_topic, disruption?.summary ?? null, disruption?.duration ?? null, disruption?.days ?? null],
     );
+    // Activités de ce voyage uniquement (revérifié ici aussi : jointure sur trip_item du même voyage).
+    if (disruption && disruption.impacted.length > 0) {
+      await client.query(
+        `insert into trip_message_impact (message_id, item_id, day, start_time, title, reason)
+         select $1, i.id, i.day, i.start_time, i.title, k.reason from unnest($3::int[], $4::varchar[]) as k (item_id, reason)
+         join trip_item i on i.id = k.item_id and i.trip_id = $2`,
+        [rows[0].id, tripId, disruption.impacted.map((item) => item.item_id), disruption.impacted.map((item) => item.reason)],
+      );
+    }
 
     const { suggestions } = exchange;
     if (suggestions.length > 0) {
