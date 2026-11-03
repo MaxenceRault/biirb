@@ -37,6 +37,13 @@ import { adminUpdateTicketSchema, createTicketSchema, TICKET_MAX_ASSIGNEES, TICK
 import { createDevTicketSchema, updateDevTicketSchema } from "@/schemas/dev-ticket.schema";
 import { displayedBadgeSchema, profileImageSchema, updateProfileSchema } from "@/schemas/user.schema";
 import { USER_ROLES } from "@/lib/roles";
+import {
+  NOTIFICATION_KINDS,
+  NOTIFICATION_LIST_LIMIT,
+  pushSubscriptionSchema,
+  pushUnsubscribeSchema,
+  tripNotificationSettingsSchema,
+} from "@/schemas/notification.schema";
 
 // Générés depuis les schémas Zod des controllers : la doc suit la validation.
 function requestBody(schema: z.ZodType) {
@@ -209,8 +216,8 @@ const noContent = { 204: { description: "Fait" } };
 const tripDetail = {
   type: "object",
   properties: {
-    trip: { type: "object", description: "Voyage (destination, dates, archetype, budget, source_post_count, generated_at)" },
-    items: { type: "array", items: { type: "object" }, description: "Activités, triées par jour et heure" },
+    trip: { type: "object", description: "Voyage (destination, dates, archetype, budget, source_post_count, generated_at, version : à renvoyer dans If-Match)" },
+    items: { type: "array", items: { type: "object" }, description: "Activités, triées par jour et heure (version : à renvoyer dans If-Match)" },
     tasks: { type: "array", items: { type: "object" }, description: "Checklist de préparation" },
     role: { type: "string", enum: ["owner", "editor", "viewer"] },
     pass: {
@@ -283,20 +290,46 @@ function withQuery<T extends { parameters: object[] }>(route: T, query: object[]
   return { ...route, parameters: [...route.parameters, ...query] };
 }
 
-function tripRoute(summary: string, options: { params?: string[]; body?: z.ZodType; ok?: object; ai?: boolean; description?: string }) {
+// Verrouillage optimiste : version lue (champ version du voyage ou de l'activité), entre guillemets.
+const ifMatchHeader = {
+  name: "If-Match",
+  in: "header",
+  required: false,
+  schema: { type: "string", pattern: '^"[1-9][0-9]{0,8}"$', example: '"3"' },
+  description: "Version lue par le client. Absente : la dernière écriture gagne. Périmée : 412 CONFLICT, rien n'est modifié.",
+};
+const tripNotificationSettings = json("Réglages du membre pour ce voyage", {
+  type: "object",
+  properties: {
+    push: { type: "boolean" },
+    email: { type: "boolean" },
+    pushPublicKey: { type: "string", nullable: true },
+    emailAvailable: { type: "boolean" },
+  },
+});
+const versionConflict = error("Modifié par un autre membre depuis la version envoyée dans If-Match", ["CONFLICT"]);
+
+function tripRoute(
+  summary: string,
+  options: { params?: string[]; body?: z.ZodType; ok?: object; ai?: boolean; description?: string; versioned?: boolean },
+) {
   return {
     tags: ["Voyages"],
     summary,
     ...(options.description ? { description: options.description } : {}),
     security: [{ bearerAuth: [] }],
     // {id} d'un voyage : son identifiant public (UUID) ; les autres ids (activité, invitation…) sont des entiers.
-    parameters: (options.params ?? ["id"]).map((name) => (name === "id" ? tripIdParam : idParam(name))),
+    parameters: [
+      ...(options.params ?? ["id"]).map((name) => (name === "id" ? tripIdParam : idParam(name))),
+      ...(options.versioned ? [ifMatchHeader] : []),
+    ],
     ...(options.body ? { requestBody: requestBody(options.body) } : {}),
     responses: {
       400: invalidInput,
       401: unauthorized,
       404: tripNotFound,
       ...(options.ai ? { 429: aiRateLimited, 503: aiUnavailable } : {}),
+      ...(options.versioned ? { 412: versionConflict } : {}),
       500: internalError,
       // En dernier : peut remplacer une réponse par défaut.
       ...(options.ok ?? { 200: json("Voyage à jour", tripDetail) }),
@@ -599,6 +632,7 @@ export function buildOpenApiDocument() {
         get: tripRoute("Détail d'un voyage", {}),
         patch: tripRoute("Modifier le titre, le budget ou la mémoire de Biirbou", {
           body: updateTripSchema,
+          versioned: true,
           description: "memory : ce que Biirbou a retenu de la discussion, corrigé ou effacé (chaîne vide) ; filtrée contre l'injection (400 INSTRUCTIONS_REJECTED).",
         }),
         delete: tripRoute("Supprimer un voyage", { ok: { 204: { description: "Supprimé" } } }),
@@ -769,8 +803,19 @@ export function buildOpenApiDocument() {
         post: tripRoute("Ajouter une activité", { body: createTripItemSchema, ok: { 201: json("Voyage à jour", tripDetail) } }),
       },
       "/trips/{id}/items/{itemId}": {
-        patch: tripRoute("Modifier une activité", { params: ["id", "itemId"], body: updateTripItemSchema }),
-        delete: tripRoute("Supprimer une activité", { params: ["id", "itemId"] }),
+        patch: tripRoute("Modifier une activité", { params: ["id", "itemId"], body: updateTripItemSchema, versioned: true }),
+        delete: tripRoute("Supprimer une activité", { params: ["id", "itemId"], versioned: true }),
+      },
+      "/trips/{id}/notification-settings": {
+        get: tripRoute("Mes notifications hors de l'app pour ce voyage (navigateur, email)", {
+          description: "Décochées par défaut. pushPublicKey : clé VAPID publique pour s'abonner (null : push non configuré).",
+          ok: { 200: tripNotificationSettings },
+        }),
+        put: tripRoute("Choisir mes notifications hors de l'app pour ce voyage", {
+          body: tripNotificationSettingsSchema,
+          description: "Tout membre, lecteur compris. L'email n'affiche jamais de texte saisi par un membre (lien vers le voyage seulement).",
+          ok: { 200: tripNotificationSettings },
+        }),
       },
       "/trips/{id}/tasks": {
         post: tripRoute("Ajouter une tâche", { body: createTripTaskSchema, ok: { 201: json("Voyage à jour", tripDetail) } }),
@@ -1037,6 +1082,70 @@ export function buildOpenApiDocument() {
         },
       },
       "/users/me/avatar": profileImagePaths("Photo de profil", "Remplace le blobatar partout (navbar, cartes, récits)."),
+      "/users/me/notifications": {
+        get: {
+          tags: ["Utilisateurs"],
+          summary: "Centre de notifications : changements faits par les autres membres de mes voyages",
+          description: `Les ${NOTIFICATION_LIST_LIMIT} plus récentes (30 jours au plus), seulement pour les voyages dont l'utilisateur est encore membre.`,
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: json("Notifications et nombre de non lues", {
+              type: "object",
+              properties: {
+                unread: { type: "integer" },
+                notifications: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "integer" },
+                      kind: { type: "string", enum: [...NOTIFICATION_KINDS] },
+                      detail: { type: "string", nullable: true, description: "Titre de l'activité ou jour (AAAA-MM-JJ)" },
+                      created_at: { type: "string", format: "date-time" },
+                      read: { type: "boolean" },
+                      trip: { type: "object", properties: { id: { type: "string", format: "uuid" }, title: { type: "string" } } },
+                      actor_name: { type: "string", nullable: true },
+                    },
+                  },
+                },
+              },
+            }),
+            401: unauthorized,
+            500: internalError,
+          },
+        },
+        delete: {
+          tags: ["Utilisateurs"],
+          summary: "Effacer toutes mes notifications",
+          security: [{ bearerAuth: [] }],
+          responses: { 204: { description: "Effacées" }, 401: unauthorized, 500: internalError },
+        },
+      },
+      "/users/me/push-subscriptions": {
+        post: {
+          tags: ["Utilisateurs"],
+          summary: "Abonner cet appareil aux notifications du navigateur (push web)",
+          description: "endpoint limité aux services de push des navigateurs (Google, Mozilla, Apple, Microsoft). Un même navigateur passe au compte connecté.",
+          security: [{ bearerAuth: [] }],
+          requestBody: requestBody(pushSubscriptionSchema),
+          responses: { 204: { description: "Abonné" }, 400: invalidInput, 401: unauthorized, 429: tooManyRequests, 500: internalError },
+        },
+        delete: {
+          tags: ["Utilisateurs"],
+          summary: "Désabonner cet appareil (déconnexion)",
+          security: [{ bearerAuth: [] }],
+          requestBody: requestBody(pushUnsubscribeSchema),
+          responses: { 204: { description: "Désabonné" }, 400: invalidInput, 401: unauthorized, 500: internalError },
+        },
+      },
+      "/users/me/notifications/read": {
+        post: {
+          tags: ["Utilisateurs"],
+          summary: "Marquer toutes mes notifications comme lues",
+          security: [{ bearerAuth: [] }],
+          responses: { 204: { description: "Marquées comme lues" }, 401: unauthorized, 500: internalError },
+        },
+      },
       "/users/me/reactions": {
         get: {
           tags: ["Réactions"],

@@ -45,6 +45,11 @@ export const idParamSchema = z.coerce.number().int().positive().max(2_147_483_64
 export const tripIdParamSchema = z.uuid();
 // Jour d'un voyage dans l'URL (AAAA-MM-JJ).
 export const dayParamSchema = isoDate;
+// En-tête If-Match (verrouillage optimiste) : version de l'activité ou du voyage lue par le client, ex. "3".
+export const ifMatchSchema = z
+  .string()
+  .regex(/^"[1-9][0-9]{0,8}"$/)
+  .transform((value) => Number(value.slice(1, -1)));
 
 // Étape du voyage : un lieu de country-state-city (ville → région obligatoire).
 const tripDestinationSchema = z

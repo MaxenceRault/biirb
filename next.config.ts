@@ -38,7 +38,7 @@ const corsHeaders = appUrl
   ? [
       { key: "Access-Control-Allow-Origin", value: appUrl },
       { key: "Access-Control-Allow-Methods", value: "GET, POST, PUT, PATCH, DELETE, OPTIONS" },
-      { key: "Access-Control-Allow-Headers", value: "Authorization, Content-Type" },
+      { key: "Access-Control-Allow-Headers", value: "Authorization, Content-Type, If-Match" },
       { key: "Access-Control-Max-Age", value: "600" },
       { key: "Vary", value: "Origin" },
     ]

@@ -42,7 +42,7 @@ import {
   type TripMessageContext,
 } from "@/schemas/trip.schema";
 
-type TripSuggestion = Omit<TripItem, "id" | "color" | "origin"> & {
+type TripSuggestion = Omit<TripItem, "id" | "color" | "origin" | "version"> & {
   id: number;
   status: "pending" | "accepted" | "rejected";
   action: "add" | "update" | "delete";
@@ -260,7 +260,11 @@ export function TripCopilot({
   const loadMessages = useCallback(
     () =>
       apiFetch<{ messages: TripMessage[] }>(`${basePath}/messages`).then((result) => {
-        if ("data" in result) return setMessages(result.data.messages);
+        // Inchangés : on garde l'état actuel, sinon la synchronisation ramènerait la discussion en bas toutes les 30 s.
+        if ("data" in result) {
+          const next = result.data.messages;
+          return setMessages((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next));
+        }
         if (result.error === "UNAUTHORIZED") return router.replace("/login");
         setError(plannerError(result.error));
       }),

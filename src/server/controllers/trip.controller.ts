@@ -37,6 +37,7 @@ import {
   currentTripQuerySchema,
   dayParamSchema,
   idParamSchema,
+  ifMatchSchema,
   tripIdParamSchema,
   sendTripMessageSchema,
   tripPassCheckoutSchema,
@@ -83,8 +84,9 @@ export function getTripController(request: Request, { params }: { params: Params
 export function updateTripController(request: Request, { params }: { params: Params }) {
   return withTrip(request, params, async (userId, tripId) => {
     const body = await parseBody(request, updateTripSchema);
-    if (!body) return errorResponse(400, "INVALID_INPUT");
-    return json(await updateTrip(userId, tripId, body));
+    const version = parseIfMatch(request);
+    if (!body || version === false) return errorResponse(400, "INVALID_INPUT");
+    return json(await updateTrip(userId, tripId, body, version));
   });
 }
 
@@ -205,8 +207,9 @@ export function updateTripItemController(request: Request, { params }: { params:
   return withTrip(request, params, async (userId, tripId, routeParams) => {
     const itemId = idParamSchema.safeParse(routeParams.itemId);
     const body = await parseBody(request, updateTripItemSchema);
-    if (!itemId.success || !body) return errorResponse(400, "INVALID_INPUT");
-    return json(await updateTripItem(userId, tripId, itemId.data, body));
+    const version = parseIfMatch(request);
+    if (!itemId.success || !body || version === false) return errorResponse(400, "INVALID_INPUT");
+    return json(await updateTripItem(userId, tripId, itemId.data, body, version));
   });
 }
 
@@ -214,8 +217,9 @@ export function updateTripItemController(request: Request, { params }: { params:
 export function deleteTripItemController(request: Request, { params }: { params: Params }) {
   return withTrip(request, params, async (userId, tripId, routeParams) => {
     const itemId = idParamSchema.safeParse(routeParams.itemId);
-    if (!itemId.success) return errorResponse(400, "INVALID_INPUT");
-    return json(await deleteTripItem(userId, tripId, itemId.data));
+    const version = parseIfMatch(request);
+    if (!itemId.success || version === false) return errorResponse(400, "INVALID_INPUT");
+    return json(await deleteTripItem(userId, tripId, itemId.data, version));
   });
 }
 
@@ -278,6 +282,14 @@ async function parseBody<T extends z.ZodType>(request: Request, schema: T): Prom
   return body.success ? body.data : null;
 }
 
+// Version attendue (verrouillage optimiste) ; undefined : en-tête absent, dernière écriture gagnante ; false : en-tête invalide.
+function parseIfMatch(request: Request): number | undefined | false {
+  const header = request.headers.get("if-match");
+  if (header === null) return undefined;
+  const version = ifMatchSchema.safeParse(header);
+  return version.success ? version.data : false;
+}
+
 // Exports et commandes du pass : une même fenêtre par utilisateur (RATE_LIMIT_TRIP_EXPORT_*).
 function isExportRateLimited(userId: string) {
   const { max, windowMs } = getConfig().rateLimits.tripExport;
@@ -319,6 +331,7 @@ function handleError(error: unknown) {
     if (error.code === "SUGGESTION_OUTDATED") return errorResponse(409, "SUGGESTION_OUTDATED");
     if (error.code === "NOTHING_TO_UNDO") return errorResponse(404, "NOTHING_TO_UNDO");
     if (error.code === "PLAN_CHANGED") return errorResponse(409, "PLAN_CHANGED");
+    if (error.code === "CONFLICT") return errorResponse(412, "CONFLICT");
     if (error.code === "DAILY_LIMIT_REACHED") return errorResponse(429, "DAILY_LIMIT_REACHED");
     if (error.code === "AI_DISABLED") return errorResponse(503, "AI_DISABLED");
     if (error.code === "FORBIDDEN") return errorResponse(403, "FORBIDDEN");
