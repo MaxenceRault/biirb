@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { motion, useReducedMotion } from "motion/react";
 import { Badge } from "@/components/ui/Badge";
 import { Biirbou, type BiirbouMood } from "@/components/ui/Biirbou";
 import { useOnline } from "@/client/hooks/useOnline";
@@ -58,11 +57,8 @@ export type CopilotAsk = { kind: "chat"; draft?: string } | { kind: "adapt"; day
 export type CopilotRequest = CopilotAsk & { nonce: number };
 
 const CHEER_MS = 1_500;
-// Bouton flottant : écrasé à l'appui, gonflé au-delà de HOLD_MS ; au clic il grandit et devient le panneau (Motion, même
-// layoutId), qui se referme dans le bouton à la fermeture.
+// Bouton flottant : écrasé à l'appui, gonflé au-delà de HOLD_MS ; le clic ouvre le panneau aussitôt.
 const HOLD_MS = 150;
-const SHELL_LAYOUT_ID = "biirbou-copilot";
-const MORPH = { type: "spring", stiffness: 300, damping: 32 } as const;
 
 // Motifs d'imprévus proposés par « Adapter mon voyage » (textes dans messages/fr.json → Planner.copilot.adapt).
 const ADAPT_REASONS = ["rain", "tired", "late", "closed", "budget", "other"] as const;
@@ -119,7 +115,6 @@ export function CopilotCard({ detail, onOpen }: { detail: TripDetail; onOpen: (r
 // mood : réfléchit (re-génération en cours), content (réussie), fatigué (quota du jour épuisé) ; oops : après un « Annuler ».
 export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: () => void; mood?: BiirbouMood; oops?: number }) {
   const t = useTranslations("Planner");
-  const reduce = useReducedMotion() ?? false;
   const [hovered, setHovered] = useState(false);
   // Appui : il s'écrase aussitôt ; maintenu plus de HOLD_MS, il gonfle. Le clic (relâché sur le bouton) ouvre le
   // panneau tout de suite : aucune attente entre le geste et la transformation.
@@ -142,11 +137,7 @@ export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: (
   }
 
   return (
-    <motion.button
-      layoutId={reduce ? undefined : SHELL_LAYOUT_ID}
-      transition={MORPH}
-      // Rayon en style (et non en classe) : Motion le garde rond pendant la transformation en panneau.
-      style={{ borderRadius: 9999 }}
+    <button
       type="button"
       onClick={onOpen}
       onPointerEnter={() => setHovered(true)}
@@ -161,7 +152,7 @@ export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: (
       onContextMenu={(event) => event.preventDefault()}
       onFocus={() => setHovered(true)}
       onBlur={() => setHovered(false)}
-      className="group fixed right-4 bottom-4 z-40 flex touch-manipulation items-center select-none [-webkit-touch-callout:none] border border-transparent p-1.5 font-display text-label-lg text-ink transition-[background-color,border-color,box-shadow] duration-300 ease-out hover:border-line hover:bg-surface hover:shadow-lg focus-visible:border-line focus-visible:bg-surface focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none motion-reduce:transition-none md:right-6 md:bottom-6"
+      className="group fixed right-4 bottom-4 z-40 flex touch-manipulation items-center rounded-full select-none [-webkit-touch-callout:none] border border-transparent p-1.5 font-display text-label-lg text-ink transition-[background-color,border-color,box-shadow] duration-300 ease-out hover:border-line hover:bg-surface hover:shadow-lg focus-visible:border-line focus-visible:bg-surface focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none motion-reduce:transition-none md:right-6 md:bottom-6"
     >
       <span className="flex">
         <Biirbou
@@ -177,11 +168,11 @@ export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: (
       <span className="max-w-0 -translate-x-2 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:mr-3 group-hover:ml-2 group-hover:max-w-xs group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:mr-3 group-focus-visible:ml-2 group-focus-visible:max-w-xs group-focus-visible:translate-x-0 group-focus-visible:opacity-100 motion-reduce:transition-none">
         {t("copilot.launcher")}
       </span>
-    </motion.button>
+    </button>
   );
 }
 
-// Panneau du copilote, non modal (le planning reste visible et utilisable à côté). Composant toujours monté : la discussion et le
+// Panneau du copilote, non modal (le planning reste visible et utilisable à côté). Toujours monté : la discussion et le
 // brouillon survivent à sa fermeture. Une proposition n'est ajoutée au planning que si l'utilisateur répond oui.
 export function TripCopilot({
   open,
@@ -221,7 +212,6 @@ export function TripCopilot({
   // Réponses reçues : Biirbou saute à chaque nouvelle réponse.
   const [answers, setAnswers] = useState(0);
   const online = useOnline();
-  const reduce = useReducedMotion() ?? false;
   const [error, setError] = useState<PlannerError | null>(null);
   const panel = useRef<HTMLElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -353,41 +343,21 @@ export function TripCopilot({
     );
   }
 
-  // Fermé : rien n'est affiché, mais l'état (discussion, brouillon) reste dans ce composant toujours monté.
-  if (!open) return null;
   return (
-    <motion.aside
-      layoutId={reduce ? undefined : SHELL_LAYOUT_ID}
-      transition={MORPH}
-      style={{ borderRadius: 0 }}
+    <aside
       ref={panel}
       tabIndex={-1}
       aria-label={t("copilot.panelLabel")}
       onKeyDown={(event) => {
         if (event.key === "Escape") onClose();
       }}
-      className="fixed inset-y-0 right-0 z-50 flex w-full flex-col overflow-hidden border-l border-line bg-surface shadow-lg focus-visible:outline-none sm:w-[26rem]"
+      className={`fixed inset-y-0 right-0 z-50 w-full flex-col border-l ${open ? "flex" : "hidden"} border-line bg-surface shadow-lg focus-visible:outline-none sm:w-[26rem]`}
     >
-      {/* Le contenu apparaît une fois le panneau presque ouvert : pas de texte déformé pendant la transformation. */}
-      <motion.div
-        className="flex min-h-0 flex-1 flex-col"
-        initial={reduce ? false : { opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.06, duration: 0.18 }}
-      >
       <div className="flex items-start justify-between gap-3 border-b border-line px-5 pt-5 pb-4">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
             {/* Animé dans le panneau (réfléchit pendant la réponse, content quand une idée est acceptée) ; immobile dans le planning. */}
-            {/* Arrive d'un petit bond une fois le panneau ouvert. */}
-            <motion.span
-              className="flex"
-              initial={reduce ? false : { scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 500, damping: 16, delay: 0.18 }}
-            >
-              <Biirbou mood={panelMood} bounce={answers} oops={refreshKey} followPointer className="size-10" />
-            </motion.span>
+            <Biirbou mood={panelMood} bounce={answers} oops={refreshKey} followPointer className="size-10" />
             {t("copilot.title")}
           </h2>
           <p className="truncate text-label-sm text-ink-soft">{trip.title}</p>
@@ -540,8 +510,7 @@ export function TripCopilot({
           </div>
         )}
       </div>
-      </motion.div>
-    </motion.aside>
+    </aside>
   );
 }
 
