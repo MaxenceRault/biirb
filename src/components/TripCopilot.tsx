@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/Badge";
+import { Biirbou, type BiirbouMood } from "@/components/ui/Biirbou";
+import { useOnline } from "@/client/hooks/useOnline";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FormError } from "@/components/ui/FormError";
@@ -57,6 +59,10 @@ type Mutate = (path: string, method: string, body?: unknown) => Promise<boolean>
 export type CopilotAsk = { kind: "chat"; draft?: string } | { kind: "adapt"; day: string } | { kind: "whatNow" };
 export type CopilotRequest = CopilotAsk & { nonce: number };
 
+const CHEER_MS = 1_500;
+// Bouton flottant : écrasé à l'appui, gonflé au-delà de HOLD_MS ; le clic ouvre le panneau aussitôt.
+const HOLD_MS = 150;
+
 // Motifs d'imprévus proposés par « Adapter mon voyage » (textes dans messages/fr.json → Planner.copilot.adapt).
 const ADAPT_REASONS = ["rain", "tired", "late", "closed", "budget", "other"] as const;
 
@@ -80,7 +86,7 @@ export function CopilotCard({ detail, onOpen }: { detail: TripDetail; onOpen: (r
     <Card className="flex flex-col gap-4 p-6">
       <div className="flex flex-col gap-1">
         <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
-          <Icon name="sparkles" className="size-5 text-accent" />
+          <Biirbou animated={false} className="size-9" />
           {t("copilot.title")}
         </h2>
         <p className="text-body-sm text-ink-soft">{t(`copilot.cardText.${moment.kind}`)}</p>
@@ -113,17 +119,65 @@ export function CopilotCard({ detail, onOpen }: { detail: TripDetail; onOpen: (r
   );
 }
 
-// Bouton flottant : Biirbou depuis tous les onglets du voyage (Planning, Tableau, Dépenses).
-export function CopilotLauncher({ onOpen }: { onOpen: () => void }) {
+// Bouton flottant : Biirbou depuis tous les onglets du voyage (Planning, Tableau, Dépenses). Au repos, la mascotte seule
+// (animée) ; au survol ou au focus, le fond blanc et l'ombre apparaissent et son nom glisse à sa droite (toujours lu par
+// les lecteurs d'écran).
+// mood : réfléchit (re-génération en cours), content (réussie), fatigué (quota du jour épuisé) ; oops : après un « Annuler ».
+export function CopilotLauncher({ onOpen, mood = "idle", oops = 0 }: { onOpen: () => void; mood?: BiirbouMood; oops?: number }) {
   const t = useTranslations("Planner");
+  const [hovered, setHovered] = useState(false);
+  // Appui : il s'écrase aussitôt ; maintenu plus de HOLD_MS, il gonfle. Le clic (relâché sur le bouton) ouvre le
+  // panneau tout de suite : aucune attente entre le geste et la transformation.
+  const [pressed, setPressed] = useState(false);
+  const [holding, setHolding] = useState(false);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  function press() {
+    setPressed(true);
+    holdTimer.current = setTimeout(() => {
+      setPressed(false);
+      setHolding(true);
+    }, HOLD_MS);
+  }
+
+  function release() {
+    clearTimeout(holdTimer.current);
+    setPressed(false);
+    setHolding(false);
+  }
+
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-full bg-ink px-5 py-3 font-display text-label-lg text-surface shadow-lg transition hover:bg-ink/90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none md:right-6 md:bottom-6"
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => {
+        setHovered(false);
+        release();
+      }}
+      onPointerDown={press}
+      onPointerUp={release}
+      onPointerCancel={release}
+      // Appui long sur mobile : pas de menu contextuel ni de sélection.
+      onContextMenu={(event) => event.preventDefault()}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+      className="group fixed right-4 bottom-4 z-40 flex touch-manipulation items-center rounded-full select-none [-webkit-touch-callout:none] border border-transparent p-1.5 font-display text-label-lg text-ink transition-[background-color,border-color,box-shadow] duration-300 ease-out hover:border-line hover:bg-surface hover:shadow-lg focus-visible:border-line focus-visible:bg-surface focus-visible:shadow-lg focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none motion-reduce:transition-none md:right-6 md:bottom-6"
     >
-      <Icon name="sparkles" className="size-5 text-accent" />
-      {t("copilot.launcher")}
+      <span className="flex">
+        <Biirbou
+          mood={mood}
+          oops={oops}
+          hovered={hovered}
+          pressed={pressed}
+          inflating={holding}
+          followPointer
+          className="size-16 drop-shadow-md transition-[filter] duration-300 group-hover:drop-shadow-none group-focus-visible:drop-shadow-none"
+        />
+      </span>
+      <span className="max-w-0 -translate-x-2 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:mr-3 group-hover:ml-2 group-hover:max-w-xs group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:mr-3 group-focus-visible:ml-2 group-focus-visible:max-w-xs group-focus-visible:translate-x-0 group-focus-visible:opacity-100 motion-reduce:transition-none">
+        {t("copilot.launcher")}
+      </span>
     </button>
   );
 }
@@ -168,6 +222,11 @@ export function TripCopilot({
   // Message en cours d'envoi (affiché tout de suite, avant la réponse de Biirbou).
   const [pending, setPending] = useState<string | null>(null);
   const sending = pending !== null;
+  const [cheering, setCheering] = useState(false);
+  const [disappointed, setDisappointed] = useState(false);
+  // Réponses reçues : Biirbou saute à chaque nouvelle réponse.
+  const [answers, setAnswers] = useState(0);
+  const online = useOnline();
   const [error, setError] = useState<PlannerError | null>(null);
   const panel = useRef<HTMLElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -179,6 +238,18 @@ export function TripCopilot({
   const [counter, setCounter] = useState({ base: aiQuota.used, sent: 0 });
   const used = aiQuota.used + (counter.base === aiQuota.used ? counter.sent : 0);
   const quotaReached = aiQuota.limit !== null && used >= aiQuota.limit;
+  // Humeur de Biirbou dans le panneau (oops : refreshKey change après un « Annuler »).
+  const panelMood = !online
+    ? "asleep"
+    : sending
+      ? "thinking"
+      : cheering
+        ? "happy"
+        : disappointed
+          ? "sad"
+          : quotaReached
+            ? "tired"
+            : "idle";
 
   const loadMessages = useCallback(
     () =>
@@ -237,6 +308,7 @@ export function TripCopilot({
 
     if ("data" in result) {
       setMessages(result.data.messages);
+      setAnswers((count) => count + 1);
       setCounter({ base: aiQuota.used, sent: used - aiQuota.used + 1 });
       void onReload();
       return true;
@@ -294,6 +366,10 @@ export function TripCopilot({
   async function answer(suggestion: TripSuggestion, accepted: boolean) {
     const ok = await mutate(`/suggestions/${suggestion.id}`, "PATCH", { accepted });
     if (!ok) return loadMessages();
+    // Content quand une de ses idées entre dans le planning, déçu quand elle est refusée.
+    const setMood = accepted ? setCheering : setDisappointed;
+    setMood(true);
+    setTimeout(() => setMood(false), CHEER_MS);
     const status = accepted ? "accepted" : "rejected";
     setMessages((current) =>
       (current ?? []).map((message) => ({
@@ -317,7 +393,8 @@ export function TripCopilot({
       <div className="flex items-start justify-between gap-3 border-b border-line px-5 pt-5 pb-4">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
-            <Icon name="sparkles" className="size-5 text-accent" />
+            {/* Animé dans le panneau (réfléchit pendant la réponse, content quand une idée est acceptée) ; immobile dans le planning. */}
+            <Biirbou mood={panelMood} bounce={answers} oops={refreshKey} followPointer className="size-10" />
             {t("copilot.title")}
           </h2>
           <p className="truncate text-label-sm text-ink-soft">{trip.title}</p>
