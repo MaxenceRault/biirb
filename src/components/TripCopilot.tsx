@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type Keyboard
 import { useFormatter, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/Badge";
 import { Biirbou } from "@/components/ui/Biirbou";
+import { useOnline } from "@/client/hooks/useOnline";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FormError } from "@/components/ui/FormError";
@@ -172,6 +173,10 @@ export function TripCopilot({
   const [adaptDay, setAdaptDay] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [cheering, setCheering] = useState(false);
+  const [disappointed, setDisappointed] = useState(false);
+  // Réponses reçues : Biirbou saute à chaque nouvelle réponse.
+  const [answers, setAnswers] = useState(0);
+  const online = useOnline();
   const [error, setError] = useState<PlannerError | null>(null);
   const panel = useRef<HTMLElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -183,6 +188,18 @@ export function TripCopilot({
   const [counter, setCounter] = useState({ base: aiQuota.used, sent: 0 });
   const used = aiQuota.used + (counter.base === aiQuota.used ? counter.sent : 0);
   const quotaReached = aiQuota.limit !== null && used >= aiQuota.limit;
+  // Humeur de Biirbou dans le panneau (oops : refreshKey change après un « Annuler »).
+  const panelMood = !online
+    ? "asleep"
+    : sending
+      ? "thinking"
+      : cheering
+        ? "happy"
+        : disappointed
+          ? "sad"
+          : quotaReached
+            ? "tired"
+            : "idle";
 
   const loadMessages = useCallback(
     () =>
@@ -236,6 +253,7 @@ export function TripCopilot({
 
     if ("data" in result) {
       setMessages(result.data.messages);
+      setAnswers((count) => count + 1);
       setDraft("");
       setAdaptDay(null);
       setCounter({ base: aiQuota.used, sent: used - aiQuota.used + 1 });
@@ -277,11 +295,10 @@ export function TripCopilot({
   async function answer(suggestion: TripSuggestion, accepted: boolean) {
     const ok = await mutate(`/suggestions/${suggestion.id}`, "PATCH", { accepted });
     if (!ok) return loadMessages();
-    // Biirbou est content quand une de ses idées entre dans le planning.
-    if (accepted) {
-      setCheering(true);
-      setTimeout(() => setCheering(false), CHEER_MS);
-    }
+    // Content quand une de ses idées entre dans le planning, déçu quand elle est refusée.
+    const setMood = accepted ? setCheering : setDisappointed;
+    setMood(true);
+    setTimeout(() => setMood(false), CHEER_MS);
     const status = accepted ? "accepted" : "rejected";
     setMessages((current) =>
       (current ?? []).map((message) => ({
@@ -305,7 +322,7 @@ export function TripCopilot({
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
             {/* Animé dans le panneau (réfléchit pendant la réponse, content quand une idée est acceptée) ; immobile dans le planning. */}
-            <Biirbou mood={sending ? "thinking" : cheering ? "happy" : "idle"} followPointer className="size-8" />
+            <Biirbou mood={panelMood} bounce={answers} oops={refreshKey} followPointer className="size-8" />
             {t("copilot.title")}
           </h2>
           <p className="truncate text-label-sm text-ink-soft">{trip.title}</p>

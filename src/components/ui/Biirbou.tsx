@@ -4,8 +4,8 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 // idle : vit sa vie (clignements, regards, plumes ébouriffées, s'endort sans activité) ; thinking : Biirbou répond ;
-// happy : content ; tired : fatigué (quota du jour épuisé) ; asleep : endormi.
-export type BiirbouMood = "idle" | "thinking" | "happy" | "tired" | "asleep";
+// happy : content ; sad : déçu (proposition refusée) ; tired : fatigué (quota du jour épuisé) ; asleep : endormi.
+export type BiirbouMood = "idle" | "thinking" | "happy" | "sad" | "tired" | "asleep";
 
 // Inactivité avant de s'endormir (mood idle) : aucun mouvement de souris, toucher, touche ni défilement.
 const SLEEP_AFTER_MS = 45_000;
@@ -28,18 +28,23 @@ const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit,
 // en pause quand l'onglet n'est pas visible.
 // animated={false} : immobile (titres) ; seule la mascotte du bouton flottant vit sa vie.
 // hovered : on le survole, il te remarque (petit sursaut, tête penchée, grands yeux). followPointer : ses yeux suivent
-// la souris.
+// la souris. bounce : un petit saut à chaque nouvelle valeur (réponse reçue). oops : un double clignement à chaque
+// nouvelle valeur (changement annulé).
 export function Biirbou({
   mood = "idle",
   animated = true,
   hovered = false,
   followPointer = false,
+  bounce = 0,
+  oops = 0,
   className = "size-6",
 }: {
   mood?: BiirbouMood;
   animated?: boolean;
   hovered?: boolean;
   followPointer?: boolean;
+  bounce?: number;
+  oops?: number;
   className?: string;
 }) {
   const reduce = (useReducedMotion() ?? false) || !animated;
@@ -93,6 +98,13 @@ export function Biirbou({
     return () => timers.forEach(clearTimeout);
   }, [alive, mood]);
 
+  // « Oups » : double clignement (après le rendu, jamais pendant).
+  useEffect(() => {
+    if (oops === 0 || reduce) return;
+    const timers = [0, 300].flatMap((delay) => [setTimeout(() => setBlink(true), delay), setTimeout(() => setBlink(false), delay + 130)]);
+    return () => timers.forEach(clearTimeout);
+  }, [oops, reduce]);
+
   // Les yeux suivent la souris (une mise à jour par image au plus).
   useEffect(() => {
     if (!alive || !followPointer) return;
@@ -143,18 +155,18 @@ export function Biirbou({
   const pupilColor = "fill-ink";
   const lineColor = "stroke-surface";
   // Ordre : réflexion (en l'air), survol (il te regarde), regard ailleurs, sinon la souris.
-  const pupil = mood === "thinking" ? { x: 2, y: -3 } : hovered ? { x: 0, y: 0.5 } : (glance ?? (followPointer ? gaze : { x: 0, y: 0 }));
+  const pupil = mood === "thinking" ? { x: 2, y: -3 } : mood === "sad" ? { x: 0, y: 2.5 } : hovered ? { x: 0, y: 0.5 } : (glance ?? (followPointer ? gaze : { x: 0, y: 0 }));
   const eyeScale = hovered && !reduce ? 1.12 : 1;
-  const eyeOpen = blink ? 0.12 : mood === "tired" ? 0.5 : 1;
+  const eyeOpen = blink ? 0.12 : mood === "tired" ? 0.5 : mood === "sad" ? 0.8 : 1;
   const showOpenEyes = !asleep && mood !== "happy";
 
   return (
     <svg ref={svg} viewBox="0 0 64 64" aria-hidden="true" className={`shrink-0 overflow-visible ${className}`}>
       {/* Nouvelle clé = nouveau départ : petit saut au réveil et quand il est content. */}
       <motion.g
-        key={`${hops}-${mood === "happy"}`}
+        key={`${hops}-${bounce}-${mood === "happy"}`}
         style={{ originX: 0.5, originY: 1 }}
-        initial={(hops > 0 || mood === "happy") && !reduce ? { y: -6, scaleY: 1.05 } : false}
+        initial={(hops > 0 || bounce > 0 || mood === "happy") && !reduce ? { y: -6, scaleY: 1.05 } : false}
         animate={
           reduce
             ? undefined
@@ -162,7 +174,9 @@ export function Biirbou({
               ? { rotate: [-6, 6], y: 0, scaleY: 1, transition: { rotate: { duration: 0.8, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" } } }
               : asleep
                 ? { rotate: 0, y: 0, scaleY: [1, 0.97], transition: { scaleY: { duration: 1.6, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" } } }
-                : hovered
+                : mood === "sad"
+                  ? { rotate: [0, -5, 5, -3, 0], y: 1.5, scaleY: 0.96, transition: { rotate: { duration: 0.8, ease: "easeInOut" }, default: SPRING } }
+                  : hovered
                   ? { rotate: -8, y: -3, scaleY: 1.04, transition: SPRING }
                   : { rotate: 0, y: 0, scaleY: 1, transition: SPRING }
         }
