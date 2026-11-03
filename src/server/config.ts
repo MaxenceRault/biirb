@@ -376,3 +376,37 @@ export function getSiteUrl(): URL | null {
   }
   return (siteUrl = new URL(parsed.data));
 }
+
+// Push web (notifications du navigateur) : clés VAPID générées une fois (npx web-push generate-vapid-keys).
+// Absentes ou invalides : seul le push est coupé (les notifications dans l'app et par email restent).
+const pushSchema = z.object({
+  // Clé publique : donnée au navigateur pour s'abonner (pas un secret).
+  VAPID_PUBLIC_KEY: z.string().regex(/^[A-Za-z0-9_-]{80,100}$/),
+  // Secret (Secret Manager en production) : jamais renvoyé au client ni écrit dans un log.
+  VAPID_PRIVATE_KEY: z.string().regex(/^[A-Za-z0-9_-]{40,50}$/),
+  // Contact demandé par les services de push (mailto: ou https:).
+  VAPID_SUBJECT: z.string().regex(/^(mailto:[^\s@]+@[^\s@]+|https:\/\/\S+)$/),
+});
+
+export type PushConfig = { publicKey: string; privateKey: string; subject: string };
+
+let push: PushConfig | null | undefined;
+
+export function getPushConfig(): PushConfig | null {
+  if (push !== undefined) return push;
+
+  const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
+  if (!VAPID_PUBLIC_KEY && !VAPID_PRIVATE_KEY && !VAPID_SUBJECT) return (push = null);
+
+  const parsed = pushSchema.safeParse({ VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT });
+  if (!parsed.success) {
+    const names = parsed.error.issues.map((issue) => issue.path.join(".")).join(", ");
+    logError("config", `invalid push env (push disabled): ${names}`);
+    return (push = null);
+  }
+  return (push = {
+    publicKey: parsed.data.VAPID_PUBLIC_KEY,
+    privateKey: parsed.data.VAPID_PRIVATE_KEY,
+    subject: parsed.data.VAPID_SUBJECT,
+  });
+}

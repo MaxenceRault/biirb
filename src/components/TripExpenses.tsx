@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +15,7 @@ import { FIELD_CLASS_NAME, Input } from "@/components/ui/Input";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { TripRole } from "@/components/TripSharePanel";
 import { apiFetch } from "@/client/session";
+import { useLiveRefresh } from "@/client/hooks/useLiveRefresh";
 import { CURRENCIES, currencyDecimals, EXPENSE_CATEGORIES, SPLIT_MODES, type SplitMode } from "@/schemas/trip-expense.schema";
 
 type Category = (typeof EXPENSE_CATEGORIES)[number];
@@ -106,6 +107,8 @@ export function TripExpenses({ tripId }: { tripId: string }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [display, setDisplay] = useState<string | null>(() => readDisplay(tripId));
   const ledgerPath = `${basePath}/expenses${display ? `?${new URLSearchParams({ display })}` : ""}`;
+  // Une relecture lancée avant ou pendant une modification ne doit pas écraser son résultat.
+  const writes = useRef(0);
 
   const fail = useCallback(
     (code: string) => {
@@ -133,9 +136,19 @@ export function TripExpenses({ tripId }: { tripId: string }) {
     setDisplay(next);
   }
 
+  // Dépenses saisies par les autres membres : visibles sans recharger. Échec silencieux.
+  useLiveRefresh(async () => {
+    if (!ledger) return;
+    const before = writes.current;
+    const result = await apiFetch<Ledger>(ledgerPath);
+    if ("data" in result && writes.current === before) setLedger(result.data);
+  });
+
   async function mutate(path: string, method: string, body?: unknown) {
     setError(null);
+    writes.current += 1;
     const result = await apiFetch<Ledger>(`${basePath}${path}`, { method, body });
+    writes.current += 1;
     if ("data" in result) {
       // Les modifications renvoient les comptes dans la devise du voyage : relus dans la devise affichée.
       if (display && display !== result.data.currency) {
