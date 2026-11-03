@@ -123,7 +123,7 @@ async function PostContent({ params }: Pick<PageProps<"/post/[slug]">, "params">
                 <nav aria-label={t("breadcrumb")} className="min-w-0">
                   <ol className="flex flex-wrap items-center gap-2 font-display text-label-md text-ink-soft/70">
                     <li>
-                      <Link href="/" className="group flex items-center gap-1.5 transition hover:text-ink">
+                      <Link href="/explore" className="group flex items-center gap-1.5 transition hover:text-ink">
                         <Icon name="arrowBack" className="size-4 transition group-hover:-translate-x-0.5" />
                         {t("back")}
                       </Link>

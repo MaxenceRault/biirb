@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { Icon, type IconName } from "@/components/ui/Icon";
 
 const LINKS: { href: string; label: "explore" | "plan"; icon: IconName }[] = [
-  { href: "/", label: "explore", icon: "explore" },
+  { href: "/explore", label: "explore", icon: "explore" },
   { href: "/planner", label: "plan", icon: "calendar" },
 ];
 
@@ -16,7 +16,7 @@ export function NavbarLinks({ variant }: { variant: "inline" | "stacked" }) {
   const pathname = usePathname();
 
   return LINKS.map(({ href, label, icon }) => {
-    const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+    const active = pathname.startsWith(href);
     return (
       <Link
         key={href}

@@ -77,7 +77,15 @@ type Mutate = (path: string, method: string, body?: unknown) => Promise<boolean>
 export type CopilotAsk = { kind: "chat"; draft?: string } | { kind: "adapt"; day: string } | { kind: "whatNow" };
 export type CopilotRequest = CopilotAsk & { nonce: number };
 
-const CHEER_MS = 1_500;
+// Content quand une idée est acceptée (plus long que déçu : c'est le moment qu'on veut qu'il savoure).
+const CHEER_MS = 2_500;
+const SAD_MS = 1_500;
+// La nuit (heure de l'appareil, celle du voyageur en voyage), Biirbou dort ; on le réveille en lui écrivant,
+// et il se rendort AWAKE_MS après la dernière interaction.
+const NIGHT_FROM_HOUR = 23;
+const NIGHT_UNTIL_HOUR = 7;
+const AWAKE_MS = 2 * 60_000;
+const isNight = (date = new Date()) => date.getHours() >= NIGHT_FROM_HOUR || date.getHours() < NIGHT_UNTIL_HOUR;
 // Bouton flottant : écrasé à l'appui, gonflé au-delà de HOLD_MS ; le clic ouvre le panneau aussitôt.
 const HOLD_MS = 150;
 
@@ -242,6 +250,12 @@ export function TripCopilot({
   const [disappointed, setDisappointed] = useState(false);
   // Réponses reçues : Biirbou saute à chaque nouvelle réponse.
   const [answers, setAnswers] = useState(0);
+  // Panneau rendu seulement dans le navigateur (voyage chargé par l'API) : l'heure locale est lisible dès le départ.
+  const [night, setNight] = useState(() => isNight());
+  const [awake, setAwake] = useState(false);
+  // Réveils : un petit saut chaque fois qu'on le tire de son sommeil.
+  const [wakeups, setWakeups] = useState(0);
+  const sleepTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const online = useOnline();
   const [error, setError] = useState<PlannerError | null>(null);
   const panel = useRef<HTMLElement>(null);
@@ -254,8 +268,10 @@ export function TripCopilot({
   const [counter, setCounter] = useState({ base: aiQuota.used, sent: 0 });
   const used = aiQuota.used + (counter.base === aiQuota.used ? counter.sent : 0);
   const quotaReached = aiQuota.limit !== null && used >= aiQuota.limit;
+  // On lui écrit : il est réveillé et regarde le voyageur.
+  const typing = draft.trim() !== "" && !sending;
   // Humeur de Biirbou dans le panneau (oops : refreshKey change après un « Annuler »).
-  const panelMood = !online
+  const panelMood: BiirbouMood = !online
     ? "asleep"
     : sending
       ? "thinking"
@@ -265,7 +281,26 @@ export function TripCopilot({
           ? "sad"
           : quotaReached
             ? "tired"
-            : "idle";
+            : night && !awake && !typing
+              ? "asleep"
+              : "idle";
+
+  // La nuit commence ou finit pendant que la page est ouverte.
+  useEffect(() => {
+    const timer = setInterval(() => setNight(isNight()), 60_000);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(sleepTimer.current);
+    };
+  }, []);
+
+  // Toute interaction le réveille (saut s'il dormait) ; il se rendort AWAKE_MS plus tard s'il fait encore nuit.
+  function wake() {
+    if (night && !awake) setWakeups((count) => count + 1);
+    setAwake(true);
+    clearTimeout(sleepTimer.current);
+    sleepTimer.current = setTimeout(() => setAwake(false), AWAKE_MS);
+  }
 
   const loadMessages = useCallback(
     () =>
@@ -314,6 +349,7 @@ export function TripCopilot({
   // context : énergie, position ou lieu (« Que faire maintenant ? », « Adapter ma journée »), envoyés avec ce message seulement.
   async function send(content: string, context: Omit<TripMessageContext, "clientTime"> = {}) {
     if (content.length < 2 || sending) return false;
+    wake();
     if (quotaReached) {
       if (!passActive) onUpsell("ai");
       return false;
@@ -390,12 +426,13 @@ export function TripCopilot({
   }
 
   async function answer(suggestion: TripSuggestion, accepted: boolean) {
+    wake();
     const ok = await mutate(`/suggestions/${suggestion.id}`, "PATCH", { accepted });
     if (!ok) return loadMessages();
     // Content quand une de ses idées entre dans le planning, déçu quand elle est refusée.
     const setMood = accepted ? setCheering : setDisappointed;
     setMood(true);
-    setTimeout(() => setMood(false), CHEER_MS);
+    setTimeout(() => setMood(false), accepted ? CHEER_MS : SAD_MS);
     const status = accepted ? "accepted" : "rejected";
     setMessages((current) =>
       (current ?? []).map((message) => ({
@@ -419,8 +456,9 @@ export function TripCopilot({
       <div className="flex items-start justify-between gap-3 border-b border-line px-5 pt-5 pb-4">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="flex items-center gap-2 font-display text-headline-sm text-ink">
-            {/* Animé dans le panneau (réfléchit pendant la réponse, content quand une idée est acceptée) ; immobile dans le planning. */}
-            <Biirbou mood={panelMood} bounce={answers} oops={refreshKey} followPointer className="size-10" />
+            {/* Animé dans le panneau : dort la nuit, se réveille quand on lui écrit et te regarde, réfléchit pendant la réponse,
+                content quand une idée est acceptée ; immobile dans le planning. */}
+            <Biirbou mood={panelMood} bounce={answers + wakeups} oops={refreshKey} hovered={typing} followPointer className="size-10" />
             {t("copilot.title")}
           </h2>
           <p className="truncate text-label-sm text-ink-soft">{trip.title}</p>
@@ -560,7 +598,10 @@ export function TripCopilot({
                 ref={input}
                 id="chat-message"
                 value={draft}
-                onChange={(event) => setDraft(event.currentTarget.value)}
+                onChange={(event) => {
+                  setDraft(event.currentTarget.value);
+                  wake();
+                }}
                 onKeyDown={handleKeyDown}
                 minLength={adaptPrefix ? undefined : 2}
                 maxLength={TRIP_MESSAGE_MAX - (adaptPrefix ? adaptPrefix.length + 1 : 0)}

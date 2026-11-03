@@ -3,7 +3,7 @@ import type { UserRole } from "@/lib/roles";
 // Type de récit géré depuis l'admin. slug : identifiant stable (URL ?archetype=).
 export type Archetype = { slug: string; label: string };
 
-// id de la colonne du feed sur l'accueil : point de retour quand on change de type de récit.
+// id de la colonne du feed (page Explorer) : point de retour quand on change de type de récit.
 export const FEED_ANCHOR_ID = "feed";
 
 export type FeedPost = {

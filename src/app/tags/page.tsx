@@ -63,7 +63,7 @@ async function PlacePostsList({ searchParams }: { searchParams: SearchParams }) 
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-3">
         <Link
-          href="/"
+          href="/explore"
           className="group flex w-fit items-center gap-1.5 font-display text-label-md text-ink-soft/70 transition hover:text-ink"
         >
           <Icon name="arrowBack" className="size-4 transition group-hover:-translate-x-0.5" />

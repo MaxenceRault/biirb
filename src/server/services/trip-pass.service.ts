@@ -4,6 +4,7 @@ import { getBuyMeACoffeeConfig, type TripPassConfig } from "@/server/config";
 import { logInfo } from "@/server/logger";
 import { findActiveUserIdByEmail, findUserEmail } from "@/server/repositories/patron.repository";
 import { hasActiveTripPass, recordTripPassPurchase, refundTripPass, saveTripPassOrder } from "@/server/repositories/trip-pass.repository";
+import { aiDailyLimitPerUser, aiDailyLimitWithTripPass } from "@/server/services/ai-quota.service";
 import { trackServerEvent } from "@/server/services/analytics.service";
 import { requireTripRole } from "@/server/services/trip-access.service";
 import { bmcExtraPurchaseSchema } from "@/schemas/patron.schema";
@@ -29,6 +30,19 @@ function tripPassConfig(): TripPassConfig | null {
 export async function getTripPassStatus(tripId: number): Promise<TripPassStatus> {
   const config = tripPassConfig();
   return { active: await hasActiveTripPass(tripId), available: config !== null, priceEur: config?.priceEur ?? null };
+}
+
+export type TripPassOffer = { available: boolean; priceEur: number | null; aiDailyLimit: number; aiDailyLimitPass: number };
+
+// Accueil : prix et nombre d'aides de Biirbou par jour, lus dans la configuration (jamais écrits en dur dans la page).
+export function getTripPassOffer(): TripPassOffer {
+  const config = tripPassConfig();
+  return {
+    available: config !== null,
+    priceEur: config?.priceEur ?? null,
+    aiDailyLimit: aiDailyLimitPerUser(),
+    aiDailyLimitPass: aiDailyLimitWithTripPass(),
+  };
 }
 
 // Toujours relu en base : jamais déduit d'une donnée envoyée par le navigateur.

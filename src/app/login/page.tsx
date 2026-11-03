@@ -57,8 +57,18 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   );
 }
 
+// Passer de la connexion à l'inscription garde la page de retour (?next=, revérifiée par nextPathAfterLogin).
+function switchHref(view: AuthView, next: string | string[] | undefined) {
+  if (typeof next !== "string" || !next.startsWith("/")) return SWITCH_HREF[view];
+  const [path, query = ""] = SWITCH_HREF[view].split("?");
+  const params = new URLSearchParams(query);
+  params.set("next", next);
+  return `${path}?${params}`;
+}
+
 async function AuthPanel({ searchParams }: Pick<PageProps<"/login">, "searchParams">) {
-  const view = parseView((await searchParams).view);
+  const params = await searchParams;
+  const view = parseView(params.view);
   const t = await getTranslations("Auth");
   const Form = FORMS[view];
 
@@ -78,7 +88,7 @@ async function AuthPanel({ searchParams }: Pick<PageProps<"/login">, "searchPara
       <p className="mt-6 text-center text-body-md text-ink-soft">
         {t(`${view}.switchPrompt`)}{" "}
         <Link
-          href={SWITCH_HREF[view]}
+          href={switchHref(view, params.next)}
           className="ml-1 font-display text-label-md text-ink transition hover:text-accent"
         >
           {t(`${view}.switchLink`)}
