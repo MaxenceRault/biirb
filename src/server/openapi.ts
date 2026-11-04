@@ -675,7 +675,10 @@ export function buildOpenApiDocument() {
           ok: {
             200: json("Voyage à jour", tripDetail),
             404: error("Rien à annuler (aucun changement de Biirbou depuis 24 h)", ["NOTHING_TO_UNDO"]),
-            409: error("Planning modifié à la main depuis ce changement : rien n'est restauré", ["PLAN_CHANGED"]),
+            409: error(
+              "Planning modifié à la main depuis ce changement, ou activité verrouillée que l'annulation supprimerait ou changerait : rien n'est restauré",
+              ["PLAN_CHANGED", "ITEM_LOCKED"],
+            ),
           },
           description:
             "Proposition acceptée, re-génération complète ou d'un jour : restaure le planning d'avant, le plus récent d'abord, " +
@@ -843,9 +846,14 @@ export function buildOpenApiDocument() {
           params: ["id", "itemId"],
           body: updateTripItemSchema,
           versioned: true,
-          description: "pinned : « Garder cette activité » ; Biirbou ne la modifie ni ne la supprime jamais (discussion, jour re-généré, voyage réimaginé).",
+          description:
+            "pinned : activité verrouillée (cadenas) ; Biirbou ne la modifie ni ne la supprime jamais (discussion, jour re-généré, voyage réimaginé). Verrouillée, seul { pinned: false } est accepté : tout autre champ (couleur comprise) → 409 ITEM_LOCKED.",
         }),
-        delete: tripRoute("Supprimer une activité", { params: ["id", "itemId"], versioned: true }),
+        delete: tripRoute("Supprimer une activité", {
+          params: ["id", "itemId"],
+          versioned: true,
+          description: "Activité verrouillée → 409 ITEM_LOCKED (la déverrouiller d'abord).",
+        }),
       },
       "/trips/{id}/notification-settings": {
         get: tripRoute("Mes notifications hors de l'app pour ce voyage (navigateur, email)", {

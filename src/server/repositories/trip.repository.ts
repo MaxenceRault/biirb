@@ -280,6 +280,8 @@ export async function findTripById(id: number): Promise<TripRow | null> {
 
 // Résultat d'une écriture avec verrouillage optimiste : "conflict" = version attendue périmée, rien n'est modifié.
 export type VersionedWrite = "done" | "not_found" | "conflict";
+// locked : activité verrouillée (pinned), seul son déverrouillage est permis.
+export type ItemWrite = VersionedWrite | "locked";
 
 // expectedVersion absente : dernière écriture gagnante (aucun If-Match envoyé).
 export async function updateTrip(id: number, changes: TripChanges, expectedVersion?: number): Promise<VersionedWrite> {
@@ -446,7 +448,8 @@ export async function updateTripItem(
   itemId: number,
   changes: TripItemChanges,
   expectedVersion?: number,
-): Promise<VersionedWrite> {
+  unlessPinned = true,
+): Promise<ItemWrite> {
   const entries = ITEM_COLUMNS.filter((column) => changes[column] !== undefined).map((column) => [column, changes[column]] as const);
   if (entries.length === 0) return "done";
 
@@ -457,26 +460,27 @@ export async function updateTripItem(
   const versionParam = entries.length + 3;
   const { rowCount } = await db.query(
     `update trip_item set ${entries.map(([column], index) => `${column} = $${index + 3}`).join(", ")}${placeReset}, version = version + 1
-     where id = $1 and trip_id = $2 and ($${versionParam}::int is null or version = $${versionParam})`,
+     where id = $1 and trip_id = $2 and ($${versionParam}::int is null or version = $${versionParam})${unlessPinned ? " and not pinned" : ""}`,
     [itemId, tripId, ...entries.map(([, value]) => value), expectedVersion ?? null],
   );
   return rowCount === 1 ? "done" : itemWriteFailure(tripId, itemId);
 }
 
-export async function deleteTripItem(tripId: number, itemId: number, expectedVersion?: number): Promise<VersionedWrite> {
+export async function deleteTripItem(tripId: number, itemId: number, expectedVersion?: number): Promise<ItemWrite> {
   const db = await getDb();
   const { rowCount } = await db.query(
-    "delete from trip_item where id = $1 and trip_id = $2 and ($3::int is null or version = $3)",
+    "delete from trip_item where id = $1 and trip_id = $2 and ($3::int is null or version = $3) and not pinned",
     [itemId, tripId, expectedVersion ?? null],
   );
   return rowCount === 1 ? "done" : itemWriteFailure(tripId, itemId);
 }
 
-// Aucune ligne touchée : activité disparue, ou modifiée par un autre membre depuis la version attendue.
-async function itemWriteFailure(tripId: number, itemId: number): Promise<VersionedWrite> {
+// Aucune ligne touchée : activité disparue, verrouillée, ou modifiée par un autre membre depuis la version attendue.
+async function itemWriteFailure(tripId: number, itemId: number): Promise<ItemWrite> {
   const db = await getDb();
-  const { rowCount } = await db.query("select 1 from trip_item where id = $1 and trip_id = $2", [itemId, tripId]);
-  return rowCount === 1 ? "conflict" : "not_found";
+  const { rows } = await db.query<{ pinned: boolean }>("select pinned from trip_item where id = $1 and trip_id = $2", [itemId, tripId]);
+  if (!rows[0]) return "not_found";
+  return rows[0].pinned ? "locked" : "conflict";
 }
 
 // Titre d'une activité (texte des notifications), lu avant sa suppression.
@@ -895,7 +899,7 @@ async function restorePlanItems(client: PoolClient, tripId: number, changeId: nu
   );
 }
 
-export async function undoLastPlanChange(tripId: number): Promise<"undone" | "none" | "changed"> {
+export async function undoLastPlanChange(tripId: number): Promise<"undone" | "none" | "changed" | "locked"> {
   const client = await (await getDb()).connect();
   try {
     await client.query("begin");
@@ -908,6 +912,17 @@ export async function undoLastPlanChange(tripId: number): Promise<"undone" | "no
     if ((await readPlanState(client, tripId, change.kind)).fingerprint !== change.fingerprint) {
       await client.query("rollback");
       return "changed";
+    }
+    // Une activité verrouillée que l'annulation supprimerait ou changerait : rien n'est restauré.
+    const { rowCount: locked } = await client.query(
+      `select 1 from trip_item i where i.trip_id = $1 and i.pinned and not exists (
+         select 1 from (${SNAPSHOT_ITEMS}) x
+         where x.id = i.id and (${ITEM_FIELDS.replace(/(\w+)/g, "i.$1")}) is not distinct from (${SNAPSHOT_VALUES}))`,
+      [tripId, change.id],
+    );
+    if (locked) {
+      await client.query("rollback");
+      return "locked";
     }
 
     await restorePlanItems(client, tripId, change.id);

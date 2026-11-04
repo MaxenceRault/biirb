@@ -94,6 +94,8 @@ export class TripError extends Error {
       | "PLAN_CHANGED"
       // Verrouillage optimiste (If-Match) : modifié par un autre membre depuis la version lue.
       | "CONFLICT"
+      // Activité verrouillée (cadenas) : ni modifiée, ni supprimée, ni changée par « Annuler » tant qu'elle l'est.
+      | "ITEM_LOCKED"
       // Quota IA (ai-quota.service).
       | "FORBIDDEN"
       | "AI_DISABLED"
@@ -429,6 +431,7 @@ export async function undoPlanChange(userId: string, tripId: number) {
   const result = await undoLastPlanChange(tripId);
   if (result === "none") throw new TripError("NOTHING_TO_UNDO");
   if (result === "changed") throw new TripError("PLAN_CHANGED");
+  if (result === "locked") throw new TripError("ITEM_LOCKED");
   await notifyTripMembers(tripId, userId, "plan_undone");
   return getTrip(userId, tripId);
 }
@@ -519,13 +522,17 @@ export async function updateTripItem(userId: string, tripId: number, itemId: num
   const { startTime, ...fields } = input;
   // Contenu changé à la main (pas seulement la couleur ou l'épingle) : l'activité n'est plus celle proposée par Biirbou.
   const edited = Object.keys(input).some((key) => key !== "color" && key !== "pinned");
+  // Verrouillée : seul le déverrouillage passe (vérifié dans la même requête que l'écriture).
+  const unlockOnly = Object.keys(input).every((key) => key === "pinned");
   const result = await updateTripItemRow(
     tripId,
     itemId,
     { ...fields, ...(startTime ? { start_time: startTime } : {}), ...(edited ? { origin: "manual" as const } : {}) },
     expectedVersion,
+    !unlockOnly,
   );
   if (result === "not_found") throw new TripError("NOT_FOUND");
+  if (result === "locked") throw new TripError("ITEM_LOCKED");
   if (result === "conflict") throw new TripError("CONFLICT");
   // Couleur ou épingle seule : pas un changement du programme.
   if (edited) await notifyTripMembers(tripId, userId, "item_updated", input.title ?? (await findTripItemTitle(tripId, itemId)));
@@ -537,6 +544,7 @@ export async function deleteTripItem(userId: string, tripId: number, itemId: num
   const title = await findTripItemTitle(tripId, itemId);
   const result = await deleteTripItemRow(tripId, itemId, expectedVersion);
   if (result === "not_found") throw new TripError("NOT_FOUND");
+  if (result === "locked") throw new TripError("ITEM_LOCKED");
   if (result === "conflict") throw new TripError("CONFLICT");
   await notifyTripMembers(tripId, userId, "item_deleted", title);
   return getTrip(userId, tripId);
