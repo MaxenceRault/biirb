@@ -342,6 +342,7 @@ function handleError(error: unknown) {
     if (error.code === "NOTHING_TO_UNDO") return errorResponse(404, "NOTHING_TO_UNDO");
     if (error.code === "PLAN_CHANGED") return errorResponse(409, "PLAN_CHANGED");
     if (error.code === "CONFLICT") return errorResponse(412, "CONFLICT");
+    if (error.code === "ITEM_LOCKED") return errorResponse(409, "ITEM_LOCKED");
     if (error.code === "DAILY_LIMIT_REACHED") return errorResponse(429, "DAILY_LIMIT_REACHED");
     if (error.code === "AI_DISABLED") return errorResponse(503, "AI_DISABLED");
     if (error.code === "FORBIDDEN") return errorResponse(403, "FORBIDDEN");

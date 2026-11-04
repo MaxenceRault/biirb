@@ -127,6 +127,12 @@ function TableCell({
       <span className="flex items-center gap-1 text-label-sm text-ink-soft">
         <Icon name={CATEGORY_ICONS[item.category]} className="size-3.5" />
         {item.start_time}
+        {item.pinned && (
+          <span title={t("item.pinnedHint")} className="ml-auto text-accent">
+            <Icon name="lock" className="size-3.5" />
+            <span className="sr-only">{t("item.pinned")}</span>
+          </span>
+        )}
       </span>
       <span className="block text-body-sm font-medium text-ink">{item.title}</span>
     </>
@@ -138,7 +144,8 @@ function TableCell({
 
   return (
     <li ref={ref}>
-      {canEdit ? (
+      {/* Verrouillée : couleur figée aussi (le serveur la refuse, ITEM_LOCKED). */}
+      {canEdit && !item.pinned ? (
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}

@@ -113,7 +113,7 @@ export function TripChangePreview({
               </span>
               {row.pinned && (
                 <span title={t("kept")} className="shrink-0 text-accent">
-                  <Icon name="pushPin" className="size-4" />
+                  <Icon name="lock" className="size-4" />
                   <span className="sr-only">{t("kept")}</span>
                 </span>
               )}

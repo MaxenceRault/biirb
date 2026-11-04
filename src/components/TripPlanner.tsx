@@ -139,6 +139,7 @@ const PLANNER_ERRORS = [
   "SUGGESTION_OUTDATED",
   "NOTHING_TO_UNDO",
   "PLAN_CHANGED",
+  "ITEM_LOCKED",
   "DAILY_LIMIT_REACHED",
   "AI_DISABLED",
   "FORBIDDEN",
@@ -277,6 +278,8 @@ export function TripPlanner({ tripId }: { tripId: string }) {
     }
     if (result.error === "CONFLICT") return resolveConflict(path, method, body);
     if (result.error === "UNAUTHORIZED") router.replace("/login");
+    // Verrouillée entre-temps par un autre membre : on relit le planning pour afficher le cadenas.
+    if (result.error === "ITEM_LOCKED") await reloadTrip();
     // Limite atteinte sur un voyage sans pass : on propose le pass plutôt qu'un simple message d'erreur.
     const upsell = upsellFor(result.error);
     if (upsell) setPassFeature(upsell);
@@ -1024,7 +1027,8 @@ function ItemRow({
   const menuId = useId();
   useDismiss(card, menuOpen, () => setMenuOpen(false));
 
-  if (editingVersion !== null) {
+  // Verrouillée par un autre membre pendant la saisie : le formulaire se ferme avec le planning relu.
+  if (editingVersion !== null && !item.pinned) {
     return (
       <li>
         <ItemForm
@@ -1040,12 +1044,15 @@ function ItemRow({
   }
 
   const togglePin = () => void mutate(`/items/${item.id}`, "PATCH", { pinned: !item.pinned }, item.version);
-  const actions = [
-    { icon: "sparkles" as const, label: t("item.menu.ask"), run: onAsk },
-    { icon: "pushPin" as const, label: t(item.pinned ? "item.menu.unpin" : "item.menu.pin"), run: togglePin },
-    { icon: "edit" as const, label: t("item.menu.edit"), run: () => setEditingVersion(item.version) },
-    { icon: "delete" as const, label: t("item.menu.delete"), run: () => void remove(), danger: true },
-  ];
+  // Verrouillée : plus aucune action, sauf la déverrouiller (le serveur refuse le reste, ITEM_LOCKED).
+  const actions: { icon: IconName; label: string; hint: string; run: () => void; danger?: boolean }[] = item.pinned
+    ? [{ icon: "lockOpen", label: t("item.menu.unpin"), hint: t("item.hints.unpin"), run: togglePin }]
+    : [
+        { icon: "sparkles", label: t("item.menu.ask"), hint: t("item.hints.ask"), run: onAsk },
+        { icon: "lock", label: t("item.menu.pin"), hint: t("item.hints.pin"), run: togglePin },
+        { icon: "edit", label: t("item.menu.edit"), hint: t("item.hints.edit"), run: () => setEditingVersion(item.version) },
+        { icon: "delete", label: t("item.menu.delete"), hint: t("item.hints.delete"), run: () => void remove(), danger: true },
+      ];
 
   // Une suppression à la main ne s'annule pas (« Annuler » ne concerne que les changements de Biirbou).
   async function remove() {
@@ -1081,7 +1088,7 @@ function ItemRow({
           {item.title}
           {item.pinned && (
             <Badge tone="accent" title={t("item.pinnedHint")}>
-              <Icon name="pushPin" className="size-3" />
+              <Icon name="lock" className="size-3" />
               {t("item.pinned")}
             </Badge>
           )}
@@ -1097,20 +1104,39 @@ function ItemRow({
       </div>
       {canEdit && (
         <>
-          <div className="hidden shrink-0 flex-row gap-1 sm:flex">
-            <IconButton icon="sparkles" label={t("copilot.askItem", { title: item.title })} onClick={onAsk} />
+          {/* self-center + items-center : centrés dans la carte sans s'étirer sur sa hauteur (fond du survol compris). */}
+          <div className="hidden shrink-0 flex-row items-center gap-1 self-center sm:flex">
+            {!item.pinned && (
+              <IconButton
+                icon="sparkles"
+                label={t("copilot.askItem", { title: item.title })}
+                hint={t("item.hints.ask")}
+                onClick={onAsk}
+              />
+            )}
             <IconButton
-              icon="pushPin"
+              icon={item.pinned ? "lock" : "lockOpen"}
               label={t(item.pinned ? "item.unpin" : "item.pin", { title: item.title })}
+              hint={t(item.pinned ? "item.hints.unpin" : "item.hints.pin")}
               pressed={item.pinned}
               onClick={togglePin}
             />
-            <IconButton icon="edit" label={t("item.edit", { title: item.title })} onClick={() => setEditingVersion(item.version)} />
-            <IconButton
-              icon="delete"
-              label={t("item.delete", { title: item.title })}
-              onClick={() => void remove()}
-            />
+            {!item.pinned && (
+              <>
+                <IconButton
+                  icon="edit"
+                  label={t("item.edit", { title: item.title })}
+                  hint={t("item.hints.edit")}
+                  onClick={() => setEditingVersion(item.version)}
+                />
+                <IconButton
+                  icon="delete"
+                  label={t("item.delete", { title: item.title })}
+                  hint={t("item.hints.delete")}
+                  onClick={() => void remove()}
+                />
+              </>
+            )}
           </div>
           {/* Clavier et lecteur d'écran sur mobile : le même menu, sans toucher la carte. */}
           <button
@@ -1128,7 +1154,7 @@ function ItemRow({
               id={menuId}
               role="menu"
               aria-label={t("item.actions", { title: item.title })}
-              className="absolute top-2 right-2 z-20 flex w-56 flex-col rounded-lg border border-line bg-surface p-1 shadow-sm sm:hidden"
+              className="absolute top-2 right-2 z-20 flex w-64 flex-col rounded-lg border border-line bg-surface p-1 shadow-sm sm:hidden"
             >
               {actions.map((action) => (
                 <li key={action.icon} role="none">
@@ -1139,12 +1165,15 @@ function ItemRow({
                       setMenuOpen(false);
                       action.run();
                     }}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left font-display text-label-lg transition hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none ${
+                    className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left transition hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none ${
                       action.danger ? "text-error" : "text-ink"
                     }`}
                   >
-                    <Icon name={action.icon} className="size-4.5" />
-                    {action.label}
+                    <Icon name={action.icon} className="mt-0.5 size-4.5 shrink-0" />
+                    <span className="flex flex-col">
+                      <span className="font-display text-label-lg">{action.label}</span>
+                      <span className="text-body-sm text-ink-soft">{action.hint}</span>
+                    </span>
                   </button>
                 </li>
               ))}
