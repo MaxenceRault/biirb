@@ -162,6 +162,8 @@ async function locateItems(tripId: number, places: ItemPlaceRow[], area: DayArea
       // Panne : rien n'est enregistré, nouvel essai au prochain affichage.
       if (!candidates) return pending.push(place.id);
       const found = candidates
+        // Une ville, une région ou un pays n'est pas le lieu d'une activité : son centre donnerait un trajet faux.
+        .filter((candidate) => !COARSE_LAYERS.has(candidate.layer))
         .sort((a, b) => layerRank(a.layer) - layerRank(b.layer))
         .find((candidate) => placeNameMatches(text, candidate.name, area.name));
       await saveItemPlace(tripId, place.id, searchKey(place, area), found ? { latitude: found.latitude, longitude: found.longitude } : null);
@@ -184,6 +186,7 @@ function searchText(place: ItemPlaceRow) {
 
 // Un lieu précis avant un quartier : « Ichiran Shibuya » est le restaurant, pas le quartier Shibuya.
 const PRECISE_LAYERS = ["venue", "address", "street"];
+const COARSE_LAYERS = new Set(["locality", "localadmin", "county", "macrocounty", "region", "macroregion", "country", "dependency", "empire", "continent", "ocean", "marinearea"]);
 
 function layerRank(layer: string) {
   const index = PRECISE_LAYERS.indexOf(layer);
@@ -207,7 +210,8 @@ function dayPairs(places: ItemPlaceRow[]) {
 // Ce qui a été cherché, et autour de quelle ville : un titre, un lieu ou une ville du jour qui change = nouvelle recherche.
 function searchKey(place: ItemPlaceRow, area: DayArea) {
   const text = searchText(place) || place.title;
-  return `${text} @${area.country}:${area.latitude.toFixed(2)},${area.longitude.toFixed(2)}`.slice(0, PLACE_QUERY_MAX);
+  // « v2 » : lieux cherchés avant le refus des villes et régions entières, cherchés de nouveau une fois.
+  return `v2 ${text} @${area.country}:${area.latitude.toFixed(2)},${area.longitude.toFixed(2)}`.slice(0, PLACE_QUERY_MAX);
 }
 
 // Tronçons déjà en cache, et ceux qui manquent.

@@ -874,18 +874,18 @@ function UsersTab({ call, currentUserId }: { call: Call; currentUserId: string |
                     </div>
                   </div>
 
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    aria-expanded={transactionsOf === user.id}
-                    onClick={() => setTransactionsOf((current) => (current === user.id ? null : user.id))}
-                    className="shrink-0 self-start md:self-center"
-                  >
-                    {t("users.transactions")}
-                  </Button>
-                  {/* Son propre compte : l'API le refuse aussi. */}
+                  {/* Une seule rangée d'actions, qui passe à la ligne sur mobile. Son propre compte : l'API le refuse aussi. */}
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      aria-expanded={transactionsOf === user.id}
+                      onClick={() => setTransactionsOf((current) => (current === user.id ? null : user.id))}
+                    >
+                      {t("users.transactions")}
+                    </Button>
                   {!self && (
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <>
                       <label htmlFor={`role-${user.id}`} className="sr-only">
                         {t("users.roleLabel", { name: user.display_name })}
                       </label>
@@ -952,8 +952,9 @@ function UsersTab({ call, currentUserId }: { call: Call; currentUserId: string |
                           </Button>
                         </>
                       )}
-                    </div>
+                    </>
                   )}
+                  </div>
                 </Card>
                 {transactionsOf === user.id && <UserTransactions call={call} userId={user.id} />}
               </li>

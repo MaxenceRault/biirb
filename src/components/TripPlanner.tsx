@@ -441,7 +441,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
         </div>
       )}
 
-      <div role="tablist" aria-label={t("views.label")} className="flex gap-1 self-start rounded-lg bg-surface-muted p-1">
+      <div role="tablist" aria-label={t("views.label")} className="grid grid-cols-3 gap-1 rounded-lg bg-surface-muted p-1 sm:flex sm:self-start">
         {(["plan", "table", "expenses"] as const).map((value) => (
           <button
             key={value}
@@ -449,7 +449,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
             role="tab"
             aria-selected={view === value}
             onClick={() => setView(value)}
-            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 font-display text-label-lg transition focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:outline-none ${
+            className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 font-display text-label-lg transition focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:outline-none sm:px-4 ${
               view === value ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink"
             }`}
           >
@@ -619,7 +619,8 @@ function TripHeader({
 
   return (
     <Card className="flex flex-col gap-5 p-6">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+      {/* Titre et actions côte à côte seulement sur grand écran : sur tablette, les 7 boutons débordaient. */}
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div className="flex min-w-0 flex-col gap-1">
           <nav aria-label={t("trip.breadcrumb")} className="font-display text-label-md text-ink-soft uppercase">
             <Link href="/planner" className="hover:text-accent">
@@ -660,7 +661,7 @@ function TripHeader({
           )}
         </div>
 
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 lg:max-w-md lg:shrink-0 lg:justify-end">
           <TripNotificationSettings tripId={trip.id} />
           <Button variant="secondary" size="sm" onClick={onToggleSharing} aria-expanded={sharing} className="gap-1.5">
             <Icon name="share" className="size-4" />
