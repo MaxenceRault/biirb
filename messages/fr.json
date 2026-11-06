@@ -209,6 +209,11 @@
       "cta": "Créer mon voyage gratuitement",
       "explore": "Explorer les récits"
     },
+    "install": {
+      "button": "Installer l'app",
+      "hint": "Biirb sur ton écran d'accueil, ouvert directement sur tes voyages.",
+      "ios": "Sur iPhone et iPad : touche Partager, puis « Sur l'écran d'accueil »."
+    },
     "dots": {
       "label": "Blocs de la page",
       "hero": "Bienvenue",

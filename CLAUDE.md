@@ -88,6 +88,7 @@ src/
 │   ├── session.ts             # Access token en mémoire, refresh via le cookie httpOnly, appels API (apiFetch ajoute le Bearer)
 │   ├── reactions-store.ts     # Likes / enregistrements partagés entre pages et onglets (PostReactions)
 │   ├── tripExport.ts          # Export CSV du planning
+│   ├── install.ts             # Installation de la PWA : proposition du navigateur captée dès le chargement (beforeinstallprompt), rejouée au clic ; iOS : geste expliqué ; rien si déjà installée
 │   ├── push.ts                # Abonnement de cet appareil au push web (autorisation au clic), désabonnement à la déconnexion
 │   ├── analytics.ts           # trackEvent : événement Umami (attend le chargement du script, abandonné s'il est bloqué)
 │   ├── geolocation.ts         # getRoughPosition : position du voyageur au clic, arrondie (≈ 1 km), jamais gardée
@@ -120,6 +121,7 @@ src/
 │   ├── SectionDots.tsx        # Points de navigation de l'accueil (client, grand écran) : un point par bloc, fixé à droite, bloc lu en corail, nom au survol, défilement au clic
 │   ├── StoryCarousel.tsx      # Carrousel des récits récents de l'accueil (client) : défilement natif (swipe, scroll-snap), flèches sur grand écran, sans défilement automatique
 │   ├── LandingCopilotDemo.tsx # Démo « Biirbou, ton copilote » de l'accueil (client) : Accepter / Refuser cliquables, Biirbou réfléchit puis répond (content ou déçu) comme dans le panneau du planning ; rien n'est envoyé, « Rejouer » remet la démo
+│   ├── InstallAppButton.tsx   # « Installer l'app » dans le dernier bloc de l'accueil (client) : installation en un clic (Chrome, Edge, Android) ou explication (iPhone, iPad), masqué si installée ou non compatible
 │   ├── CreateTripLink.tsx     # Bouton « Créer mon voyage gratuitement » (visiteur → inscription puis /planner, mesuré : create_trip_clicked)
 │   ├── HomeSidebar.tsx        # Colonnes latérales de l'accueil (grand écran) : types de récit, destinations tendance, invitation au planificateur
 │   ├── FeedFilterLink.tsx     # Lien de filtre du feed (type de récit, client) : ne remonte pas en haut de la page, revient au début du feed s'il est hors écran
