@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { ProfileEditForm, type EditableProfile } from "@/components/ProfileEditForm";
+import { DeleteAccountSection } from "@/components/DeleteAccountSection";
 import { PROFILE_TABS_CLASS_NAME, ProfileHeader, ProfileStat, ProfileStats, profileTabClassName } from "@/components/ProfileHeader";
 import { StoryCard, StoryGrid, storyTitleId, type StoryCardData } from "@/components/StoryCard";
 import { TripCard, type TripSummary } from "@/components/TripCard";
@@ -184,7 +185,10 @@ function Profile({
       )}
 
       {editing && (
-        <ProfileEditForm user={user} onSaved={handleSaved} onImageChange={applyUser} onCancel={() => setEditing(false)} />
+        <>
+          <ProfileEditForm user={user} onSaved={handleSaved} onImageChange={applyUser} onCancel={() => setEditing(false)} />
+          <DeleteAccountSection />
+        </>
       )}
 
       <section className="flex flex-col gap-6">

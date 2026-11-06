@@ -36,12 +36,15 @@ import {
   listDevTickets,
   removeDevTicket,
   updateDevTicket,
+  getSales,
+  listUserTransactions,
 } from "@/server/services/admin.service";
 import {
   adminCloseReportsSchema,
   adminCreateBannedWordSchema,
   adminGrantTripPassSchema,
   adminPostsQuerySchema,
+  adminSalesQuerySchema,
   adminUpdatePostSchema,
   adminUpdateSettingsSchema,
   adminUpdateUserSchema,
@@ -201,6 +204,24 @@ export function deleteDevTicketController(request: Request, { params }: Context)
 // GET /api/v1/admin/trip-passes
 export function listTripPassesController(request: Request) {
   return withAdmin(request, async () => json(await listTripPasses()));
+}
+
+// GET /api/v1/admin/sales?from=&to= (#108)
+export function salesController(request: Request) {
+  return withAdmin(request, async () => {
+    const query = adminSalesQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
+    if (!query.success) return errorResponse(400, "INVALID_INPUT");
+    return json(await getSales(query.data));
+  });
+}
+
+// GET /api/v1/admin/users/[id]/transactions (#109)
+export function userTransactionsController(request: Request, { params }: Context) {
+  return withAdmin(request, async () => {
+    const userId = userIdParamSchema.safeParse((await params).id);
+    if (!userId.success) return errorResponse(400, "INVALID_INPUT");
+    return json(await listUserTransactions(userId.data));
+  });
 }
 
 // POST /api/v1/admin/trip-passes { tripId, passId?, payerEmail? }

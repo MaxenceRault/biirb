@@ -264,9 +264,71 @@ export async function findUserMediaUrls(id: string): Promise<string[]> {
   return rows.map(({ url }) => url);
 }
 
-// Récits, voyages, likes, sessions… suivent en cascade.
-export async function deleteUserById(id: string): Promise<boolean> {
+export async function findPasswordCheck(id: string): Promise<{ password_hash: string | null; role: string } | null> {
   const db = await getDb();
-  const { rowCount } = await db.query("delete from users where id = $1", [id]);
-  return rowCount === 1;
+  const { rows } = await db.query<{ password_hash: string | null; role: string }>("select password_hash, role from users where id = $1", [id]);
+  return rows[0] ?? null;
+}
+
+// Ce que la suppression du compte (#112) fait aux voyages : partagés (transmis à un membre), seuls (supprimés),
+// voyages des autres (le compte en sort).
+export type AccountDeletionImpact = { owned_shared: number; owned_alone: number; member_of: number };
+
+export async function findAccountDeletionImpact(id: string): Promise<AccountDeletionImpact> {
+  const db = await getDb();
+  const { rows } = await db.query<AccountDeletionImpact>(
+    `select
+       count(*) filter (where heir.trip_id is not null)::int as owned_shared,
+       count(*) filter (where heir.trip_id is null)::int as owned_alone,
+       (select count(*)::int from trip_member where user_id = $1) as member_of
+     from trip t
+     left join lateral (
+       select m.trip_id from trip_member m join users u on u.id = m.user_id and u.banned_at is null
+        where m.trip_id = t.id limit 1
+     ) heir on true
+     where t.user_id = $1`,
+    [id],
+  );
+  return rows[0];
+}
+
+// Suppression du compte par son titulaire (#112), en une transaction : chaque voyage partagé passe au plus ancien
+// éditeur (sinon au plus ancien lecteur) non banni, qui devient propriétaire ; les autres voyages, récits, likes et
+// sessions suivent en cascade. Le nom reste sur ses lignes de dépenses (historique des comptes des autres membres).
+// Pass voyage et dons restent, sans lien avec lui (on delete set null). null : compte introuvable.
+export async function deleteAccount(id: string): Promise<{ transferred: number; deletedTrips: number } | null> {
+  const db = await getDb();
+  const client = await db.connect();
+  try {
+    await client.query("begin");
+    const { rows: user } = await client.query<{ display_name: string }>("select display_name from users where id = $1 for update", [id]);
+    if (user.length === 0) {
+      await client.query("rollback");
+      return null;
+    }
+    await client.query("update trip_participant set name = coalesce(name, left($2, 60)) where user_id = $1", [id, user[0].display_name]);
+    const { rowCount: transferred } = await client.query(
+      `with heir as (
+         select distinct on (m.trip_id) m.trip_id, m.user_id
+           from trip_member m
+           join trip t on t.id = m.trip_id and t.user_id = $1
+           join users u on u.id = m.user_id and u.banned_at is null
+          order by m.trip_id, (m.role = 'editor') desc, m.added_at, m.user_id
+       ),
+       moved as (
+         update trip t set user_id = heir.user_id from heir where t.id = heir.trip_id returning t.id, heir.user_id
+       )
+       delete from trip_member m using moved where m.trip_id = moved.id and m.user_id = moved.user_id`,
+      [id],
+    );
+    const { rows: deleted } = await client.query<{ count: number }>("select count(*)::int as count from trip where user_id = $1", [id]);
+    await client.query("delete from users where id = $1", [id]);
+    await client.query("commit");
+    return { transferred: transferred ?? 0, deletedTrips: deleted[0].count };
+  } catch (error) {
+    await client.query("rollback").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }

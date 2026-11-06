@@ -7,6 +7,8 @@ import { useFormatter, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/Badge";
 import { Biirbou, type BiirbouMood } from "@/components/ui/Biirbou";
 import { useOnline } from "@/client/hooks/useOnline";
+import { ItemWarnings } from "@/components/ItemWarnings";
+import { itemWarnings, type ItemWarning } from "@/lib/tripChecks";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FormError } from "@/components/ui/FormError";
@@ -526,7 +528,13 @@ export function TripCopilot({
                       <SuggestionCard
                         key={suggestion.id}
                         suggestion={suggestion}
-                        dayNumber={days.indexOf(suggestion.day) + 1}
+                        days={days}
+                        // En attente seulement : une fois acceptée, l'activité est dans le planning et s'y compare.
+                        warnings={
+                          suggestion.status === "pending" && suggestion.action !== "delete"
+                            ? itemWarnings(suggestion, detail.items, suggestion.target?.id)
+                            : []
+                        }
                         onAnswer={canEdit ? (accepted) => answer(suggestion, accepted) : undefined}
                       />
                     ))}
@@ -750,6 +758,10 @@ function CopilotContext({ detail, mutate }: { detail: TripDetail; mutate: Mutate
         </li>
         {trip.instructions && <li>{t("copilot.context.wishes")}</li>}
         <li>{t("copilot.context.plan", { count: items.length })}</li>
+        <li className="flex gap-1.5 text-ink">
+          <Icon name="info" className="mt-0.5 size-4 shrink-0" />
+          {t("copilot.context.limits")}
+        </li>
       </ul>
       <CopilotMemory memory={trip.memory} canEdit={role !== "viewer"} mutate={mutate} />
     </details>
@@ -820,11 +832,13 @@ function CopilotMemory({ memory, canEdit, mutate }: { memory: string | null; can
 
 function SuggestionCard({
   suggestion,
-  dayNumber,
+  days,
+  warnings,
   onAnswer,
 }: {
   suggestion: TripSuggestion;
-  dayNumber: number;
+  days: string[];
+  warnings: ItemWarning[];
   // Absent : lecteur, la proposition est affichée sans boutons.
   onAnswer?: (accepted: boolean) => Promise<unknown>;
 }) {
@@ -851,7 +865,7 @@ function SuggestionCard({
         </Badge>
         <Icon name={CATEGORY_ICONS[suggestion.category]} className="size-4" />
         {t("chat.suggestionWhen", {
-          number: dayNumber,
+          number: days.indexOf(suggestion.day) + 1,
           date: format.dateTime(parseDay(suggestion.day), { day: "numeric", month: "short" }),
           time: suggestion.start_time,
         })}
@@ -869,6 +883,7 @@ function SuggestionCard({
         </span>
       )}
       {suggestion.description && <p className="text-body-sm text-ink-soft">{suggestion.description}</p>}
+      <ItemWarnings warnings={warnings} days={days} />
       {suggestion.action !== "delete" && (
         <p className="flex flex-wrap items-center gap-1.5 text-body-sm text-ink-soft">
           {suggestion.source_post ? (
@@ -881,6 +896,11 @@ function SuggestionCard({
           ) : (
             <Badge>{t("origin.ai")}</Badge>
           )}
+          {/* Rien n'est vérifié en direct (#69) : ni horaires, ni prix, ni accès, même tiré d'un récit. */}
+          <span className="flex items-center gap-1 text-label-sm">
+            <Icon name="info" className="size-3.5 shrink-0" />
+            {t("origin.toVerify")}
+          </span>
         </p>
       )}
 

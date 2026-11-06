@@ -3,6 +3,8 @@ import {
   findAdminActions,
   findDashboardCounts,
   findRecentUsers,
+  findSales,
+  findUserTransactions,
   insertAdminAction,
   type AdminActionTarget,
 } from "@/server/repositories/admin.repository";
@@ -23,7 +25,7 @@ import {
 import { revokeUserRefreshTokens } from "@/server/repositories/refresh-token.repository";
 import { closeOpenReports, countOpenReports, findOpenReports } from "@/server/repositories/report.repository";
 import {
-  deleteUserById,
+  deleteAccount,
   findActiveAdmins,
   findUserAccess,
   findUserMediaUrls,
@@ -72,6 +74,7 @@ import { ARCHETYPE_SLUG_PATTERN } from "@/schemas/archetype.schema";
 import type {
   AdminCreateBannedWordInput,
   AdminGrantTripPassInput,
+  AdminSalesQuery,
   AdminUpdateSettingsInput,
   AdminUpdateUserInput,
 } from "@/schemas/admin.schema";
@@ -175,8 +178,10 @@ export async function deleteUser(adminId: string, userId: string) {
   if (target.role === "admin") throw new AdminError("TARGET_IS_ADMIN");
 
   const mediaUrls = await findUserMediaUrls(userId);
-  if (!(await deleteUserById(userId))) throw new AdminError("NOT_FOUND");
-  await log(adminId, "user.delete", "user", userId);
+  // Comme une suppression par le titulaire (#112) : voyages partagés transmis à un membre, nom gardé sur les dépenses.
+  const result = await deleteAccount(userId);
+  if (!result) throw new AdminError("NOT_FOUND");
+  await log(adminId, "user.delete", "user", userId, result);
 
   // Le compte est supprimé : une photo qui résiste ne fait pas échouer la requête.
   await Promise.all(
@@ -412,6 +417,52 @@ export async function removeDevTicket(adminId: string, id: number) {
   const title = await deleteDevTicket(id);
   if (title === null) throw new AdminError("NOT_FOUND");
   await log(adminId, "dev_ticket.delete", "dev_ticket", id, { title });
+}
+
+const SALES_DEFAULT_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Ventes d'une période (#108). Les jours sont ceux de Paris (heure de l'équipe). Taux de conversion : part des voyages
+// créés dans la période qui ont un pass payé. Buy Me a Coffee ne prévient que des paiements réussis : un paiement
+// échoué n'existe pas pour Biirb ; « en attente » = commandes ouvertes (24 h) et achats à rattacher.
+export async function getSales({ from, to }: AdminSalesQuery) {
+  const end = to ?? new Date().toISOString().slice(0, 10);
+  const start = from ?? new Date(Date.parse(end) - (SALES_DEFAULT_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
+  const nextDay = new Date(Date.parse(end) + DAY_MS).toISOString().slice(0, 10);
+  const { rows, counts } = await findSales(parisMidnight(start), parisMidnight(nextDay));
+  const sales = rows.map((row) => ({
+    kind: row.kind,
+    currency: row.currency,
+    count: row.count,
+    gross: Number(row.gross),
+    refundedCount: row.refunded_count,
+    refundedAmount: Number(row.refunded_amount),
+  }));
+  return {
+    from: start,
+    to: end,
+    sales,
+    gifts: counts.gifts,
+    pending: { unassigned: counts.unassigned, openOrders: counts.open_orders },
+    conversion: {
+      tripsCreated: counts.trips_created,
+      tripsWithPass: counts.trips_with_pass,
+      rate: counts.trips_created > 0 ? counts.trips_with_pass / counts.trips_created : null,
+    },
+  };
+}
+
+// Minuit à Paris pour un jour AAAA-MM-JJ (décalage de ce jour-là : heure d'été comprise).
+function parisMidnight(day: string) {
+  const noon = new Date(`${day}T12:00:00Z`);
+  const parisNoon = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hour: "2-digit", hourCycle: "h23" }).format(noon);
+  const offsetHours = Number(parisNoon) - 12;
+  return new Date(Date.parse(`${day}T00:00:00Z`) - offsetHours * 60 * 60 * 1000).toISOString();
+}
+
+// Transactions d'un compte (#109), pour le support : pass (voyage concerné, état) et dons, références Buy Me a Coffee.
+export async function listUserTransactions(userId: string) {
+  return { transactions: await findUserTransactions(userId) };
 }
 
 const TRIP_PASSES_LIMIT = 100;

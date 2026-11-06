@@ -35,7 +35,7 @@ import { createArchetypeSchema, updateArchetypeSchema } from "@/schemas/archetyp
 import { createCommentSchema } from "@/schemas/comment.schema";
 import { adminUpdateTicketSchema, createTicketSchema, TICKET_MAX_ASSIGNEES, TICKET_STATUSES } from "@/schemas/ticket.schema";
 import { createDevTicketSchema, updateDevTicketSchema } from "@/schemas/dev-ticket.schema";
-import { displayedBadgeSchema, profileImageSchema, updateProfileSchema } from "@/schemas/user.schema";
+import { deleteAccountSchema, displayedBadgeSchema, profileImageSchema, updateProfileSchema } from "@/schemas/user.schema";
 import { USER_ROLES } from "@/lib/roles";
 import {
   NOTIFICATION_KINDS,
@@ -753,6 +753,39 @@ export function buildOpenApiDocument() {
           parameters: [tripIdParam, { name: "day", in: "path", required: true, schema: { type: "string", format: "date" } }],
         },
       },
+      "/trips/{id}/weather": {
+        get: {
+          ...tripRoute("Prévisions météo des prochains jours du voyage", {
+            description:
+              "MET Norway (api.met.no, CC BY 4.0), dans la ville du jour du planning. Seulement les jours du voyage couverts par " +
+              "les prévisions (environ 9 jours) : les autres sont absents, jamais estimés. Lecteur compris, gratuit (sans pass). " +
+              "unavailable : une partie des prévisions n'a pas pu être lue (panne, délai) ; les jours trouvés restent renvoyés.",
+            ok: {
+              200: json("Prévisions par jour", {
+                type: "object",
+                properties: {
+                  days: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        day: { type: "string", format: "date" },
+                        place: { type: "string", nullable: true },
+                        kind: { type: "string", enum: ["clear", "partly", "cloudy", "fog", "rain", "snow", "storm"] },
+                        min: { type: "integer" },
+                        max: { type: "integer" },
+                        precipitationMm: { type: "number" },
+                      },
+                    },
+                  },
+                  unavailable: { type: "boolean" },
+                },
+              }),
+              429: tooManyRequests,
+            },
+          }),
+        },
+      },
       "/trips/current": {
         get: {
           tags: ["Voyages"],
@@ -1298,6 +1331,40 @@ export function buildOpenApiDocument() {
             500: internalError,
           },
         },
+        delete: {
+          tags: ["Utilisateurs"],
+          summary: "Supprimer mon compte",
+          description:
+            "Mot de passe actuel exigé (rate limit du login). Récits, photos, likes, sessions et voyages non partagés supprimés ; " +
+            "chaque voyage partagé passe au plus ancien éditeur (sinon lecteur) non banni. Nom gardé sur les dépenses des " +
+            "voyages des autres, pass voyage et dons gardés sans lien avec le compte. Un admin doit d'abord être rétrogradé.",
+          security: [{ bearerAuth: [] }],
+          requestBody: requestBody(deleteAccountSchema),
+          responses: {
+            204: { description: "Compte supprimé" },
+            400: invalidInput,
+            401: unauthorized,
+            403: error("Mot de passe incorrect, ou compte admin", ["INVALID_CREDENTIALS", "ADMIN_ACCOUNT"]),
+            429: tooManyRequests,
+            500: internalError,
+          },
+        },
+      },
+      "/users/me/deletion": {
+        get: {
+          tags: ["Utilisateurs"],
+          summary: "Conséquences de la suppression de mon compte",
+          description: "Nombre de voyages transmis à un membre (ownedShared), supprimés (ownedAlone) et de voyages des autres quittés (memberOf).",
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: json("Conséquences", {
+              type: "object",
+              properties: { ownedShared: { type: "integer" }, ownedAlone: { type: "integer" }, memberOf: { type: "integer" } },
+            }),
+            401: unauthorized,
+            500: internalError,
+          },
+        },
       },
       "/posts/{id}/report": {
         post: {
@@ -1401,7 +1468,14 @@ export function buildOpenApiDocument() {
           conflict: true,
           description: "Bannir coupe toutes les sessions (refresh tokens révoqués, connexion refusée).",
         }),
-        delete: adminRoute("Supprimer un compte", { params: [userIdParam], ok: noContent, conflict: true, description: "Récits, voyages et photos supprimés avec lui." }),
+        delete: adminRoute("Supprimer un compte", {
+          params: [userIdParam],
+          ok: noContent,
+          conflict: true,
+          description:
+            "Récits, photos et voyages non partagés supprimés avec lui ; chaque voyage partagé passe au plus ancien éditeur (sinon " +
+            "lecteur) non banni. Pass voyage et dons gardés sans lien avec lui. Inscrit au journal.",
+        }),
       },
       "/admin/posts": {
         get: adminRoute("Récits (masqués compris)", {
@@ -1482,6 +1556,24 @@ export function buildOpenApiDocument() {
             "passId : rattache l'achat si payerEmail (déclaré par l'acheteur) correspond à l'empreinte de l'email du paiement, sinon 409 EMAIL_MISMATCH. " +
             "Sans passId : pass offert. 404 TRIP_NOT_FOUND, 409 PASS_ALREADY_ACTIVE. Inscrit au journal.",
           conflict: true,
+        }),
+      },
+      "/admin/sales": {
+        get: adminRoute("Ventes d'une période (pass voyage et dons)", {
+          query: [
+            { name: "from", in: "query", required: false, schema: { type: "string", format: "date" } },
+            { name: "to", in: "query", required: false, schema: { type: "string", format: "date" } },
+          ],
+          description:
+            "Jours de Paris, 30 derniers jours par défaut, un an au plus. Par devise : nombre, brut, remboursements (comptés à part). " +
+            "gifts : pass offerts. pending : achats à rattacher et commandes ouvertes (24 h). conversion : voyages créés dans la " +
+            "période et part avec un pass payé. Pas de paiements échoués : Buy Me a Coffee n'envoie que les paiements réussis.",
+        }),
+      },
+      "/admin/users/{id}/transactions": {
+        get: adminRoute("Transactions d'un compte (support)", {
+          params: [userIdParam],
+          description: "Pass voyage (état, voyage concerné) et dons, 100 au plus, références Buy Me a Coffee. Aucun email ni donnée bancaire.",
         }),
       },
       "/admin/trip-passes/{id}": {

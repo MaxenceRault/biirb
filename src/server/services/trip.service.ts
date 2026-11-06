@@ -11,6 +11,7 @@ import { AiQuotaError, consumeAiCall, getAiQuota } from "@/server/services/ai-qu
 import { findSelectableArchetype } from "@/server/services/archetype.service";
 import { requireTripRole } from "@/server/services/trip-access.service";
 import { notifyTripMembers } from "@/server/services/notification.service";
+import { forecastDays, type ForecastResult } from "@/server/services/weather.service";
 import { getTripPassStatus, requireTripPass } from "@/server/services/trip-pass.service";
 import { findSpendingByCategory } from "@/server/repositories/trip-expense.repository";
 import { getEuroRates } from "@/server/infra/exchangeRates";
@@ -19,6 +20,7 @@ import { buildTripCalendar } from "@/server/tripCalendar";
 import { renderTripPdf } from "@/server/tripPdf";
 import { countryName } from "@/lib/country";
 import { exportFileName } from "@/lib/fileName";
+import { transportLinks } from "@/lib/transport";
 import type { TripAccessRole } from "@/schemas/trip-share.schema";
 import {
   answerTripSuggestion as answerTripSuggestionRow,
@@ -72,8 +74,10 @@ import {
   type TripMessageContext,
   type TripDisruption,
   type TripEnergyLevel,
+  type TripWeatherKind,
 } from "@/schemas/trip.schema";
 import { logError } from "@/server/logger";
+import { tripDays } from "@/lib/tripDates";
 
 export class TripError extends Error {
   constructor(
@@ -376,6 +380,7 @@ export async function createTrip(userId: string, input: CreateTripInput): Promis
   const posts = await postsForDestinations(destinations, archetype.id);
   const generated = await generatePlan({
     destinations: routeOrder(destinations).map(destinationLabel),
+    countries: [...new Set(destinations.map((place) => place.country_code))],
     archetype: archetype.label,
     startDate: input.startDate,
     endDate: input.endDate,
@@ -598,7 +603,7 @@ export async function sendTripMessage(userId: string, tripId: number, content: s
     postsForTrip(trip),
     findSpendingByCategory(tripId),
   ]);
-  const plannedMinor = await plannedBudgetMinor(trip, spending?.currency ?? "EUR");
+  const [plannedMinor, weather] = await Promise.all([plannedBudgetMinor(trip, spending?.currency ?? "EUR"), chatWeather(trip, items)]);
   const { memory, ...answer } = await generateChatAnswer({
     ...tripContext(trip),
     posts,
@@ -608,12 +613,45 @@ export async function sendTripMessage(userId: string, tripId: number, content: s
     message: content,
     now: await tripNow(tripId, trip, items, context),
     budget: budgetContext(trip, spending, plannedMinor),
+    weather,
   });
 
   await insertTripExchange(tripId, userId, { user_content: content, ...answer });
   if (memory !== trip.memory) await updateTripRow(tripId, { memory });
   await trackServerEvent("ai_generation_completed", { kind: "chat" });
   return findTripMessages(tripId);
+}
+
+// Météo des jours du voyage couverts par les prévisions (#26), dans la ville du jour (comme les trajets) ; lecteur compris.
+export async function getTripWeather(userId: string, tripId: number): Promise<ForecastResult> {
+  const { trip } = await findTripFor(userId, tripId, "viewer");
+  return tripForecast(trip, await findTripItems(tripId));
+}
+
+const WEATHER_HORIZON_DAYS = 9;
+// La discussion n'attend pas la météo plus longtemps : sans elle, Biirbou répond avec la saison (#68 : il le sait).
+const CHAT_WEATHER_WAIT_MS = 2_500;
+
+async function tripForecast(trip: TripRow, items: TripItemRow[]): Promise<ForecastResult> {
+  // Veille comprise : selon le fuseau, la date locale de la destination est encore celle d'hier en UTC.
+  const from = new Date(Date.now() - DAY_MS).toISOString().slice(0, 10);
+  const until = new Date(Date.now() + WEATHER_HORIZON_DAYS * DAY_MS).toISOString().slice(0, 10);
+  const areaOf = tripDayAreas(trip, items);
+  const requests = tripDays(trip.start_date, trip.end_date)
+    .filter((day) => day >= from && day <= until)
+    .flatMap((day) => {
+      const area = areaOf(day);
+      return area ? [{ day, place: { name: area.name, latitude: area.latitude, longitude: area.longitude } }] : [];
+    });
+  if (requests.length === 0) return { days: [], unavailable: false };
+  return forecastDays(requests);
+}
+
+// null : voyage hors de la fenêtre des prévisions (plus de 9 jours) ou passé.
+async function chatWeather(trip: TripRow, items: TripItemRow[]): Promise<ForecastResult | null> {
+  const timeout = new Promise<ForecastResult>((resolve) => setTimeout(() => resolve({ days: [], unavailable: true }), CHAT_WEATHER_WAIT_MS));
+  const result = await Promise.race([tripForecast(trip, items), timeout]).catch((): ForecastResult => ({ days: [], unavailable: true }));
+  return result.days.length === 0 && !result.unavailable ? null : result;
 }
 
 export async function answerTripSuggestion(userId: string, tripId: number, suggestionId: number, accepted: boolean) {
@@ -675,6 +713,7 @@ function tripDestinations(trip: TripRow): TripDestinationRow[] {
 function tripContext(trip: TripRow) {
   return {
     destinations: routeOrder(tripDestinations(trip)).map(destinationLabel),
+    countries: [...new Set([...tripDestinations(trip).map((place) => place.country_code), ...trip.stops.map((stop) => stop.country_code)])],
     archetype: trip.archetype.label,
     startDate: trip.start_date,
     endDate: trip.end_date,
@@ -855,6 +894,8 @@ function placeLabel(place: { country: string; state?: string | null; city?: stri
 type PlanRequest = {
   // Étapes choisies par le voyageur (ordre de saisie : Biirbou construit le parcours).
   destinations: string[];
+  // Pays du voyage (ISO) : transporteurs et pass officiels qu'il peut citer (lib/transport.ts).
+  countries: string[];
   archetype: string;
   startDate: string;
   endDate: string;
@@ -901,9 +942,25 @@ dernière étape) ; ne t'en écarte que pour respecter un ordre, une arrivée ou
 un parcours logique :
 - Enchaîne les lieux voisins et avance dans une direction (ex. du nord au sud) ou en boucle : ne reviens jamais sur
   tes pas. Exemple à éviter : Osaka → Hakone → Kyoto → Nikko (allers-retours) ; à faire : Osaka → Kyoto → Hakone →
-  Tokyo → Nikko.
-- Visite les lieux proches depuis la même base (excursion à la journée : Nara depuis Kyoto, Nikko depuis Tokyo) et
-  réduis le temps de trajet total. Un long trajet (plus de 3 h) ne sert qu'à changer d'étape.
+  Tokyo → Nikko. Chaque ville où l'on dort forme UN SEUL bloc de jours consécutifs : une fois quittée, on n'y dort
+  plus. Seules exceptions : un tour en boucle d'un pays ou d'une région qui revient à la ville d'arrivée pour le vol
+  retour (les derniers jours seulement), ou un retour demandé dans <envies>.
+- Villes de base : on dort au moins 2 nuits au même endroit (sauf road trip ou envie contraire), et on change
+  d'hébergement le moins possible. Les lieux à moins de 2 h environ de la base se visitent en excursion à la journée
+  (aller le matin, retour le soir à la même base, sans changer d'hébergement : Nara depuis Kyoto, Nikko depuis Tokyo,
+  Versailles depuis Paris) ; écris-le dans la description (« excursion à la journée depuis Kyoto »).
+- Réduis le temps de trajet total. Un long trajet (plus de 3 h) ne sert qu'à changer de base, de préférence le matin
+  (ou de nuit en train ou bus de nuit s'il en existe), et la journée de ce trajet reste légère.
+- Choix du mode entre deux villes : le train (ou le bus là où il n'y a pas de train) jusqu'à environ 5 h de trajet,
+  l'avion seulement au-delà ou pour traverser la mer, le ferry pour les îles. Chaque trajet entre deux bases ou entre
+  deux pays est une activité de catégorie transport : titre « Train Kyoto → Tokyo » (mode, départ → arrivée),
+  description avec la gare ou l'aéroport de départ et d'arrivée, la durée approximative et, s'il est utile, le
+  transporteur ou le pass qui le couvre.
+- Pass de transport : si les trajets du voyage rendent un pass rentable (plusieurs longs trajets en train dans le
+  même pays ou entre pays d'Europe), dis-le dans la description des trajets concernés et ajoute une tâche « Acheter
+  le … » dans tasks, en citant UNIQUEMENT un nom de la liste « transportsOfficiels » du voyage. N'écris JAMAIS
+  d'adresse web ni de lien, et ne cite aucun site, pass ou transporteur absent de cette liste : Biirb affiche lui-même
+  les liens officiels. Sans pass rentable, n'en parle pas.
 - Les lieux et dates imposés par <envies> sont des points de passage fixes : organise le reste du parcours autour,
   pour y arriver par le chemin le plus direct.
 - Arrivée le premier jour et départ le dernier jour par une grande ville ou un aéroport international cohérent avec
@@ -1009,15 +1066,28 @@ const PLAN_SCHEMA: Schema = {
   },
 };
 
+// Adresses web écrites par l'IA : retirées (elle peut en inventer). Les liens officiels viennent de lib/transport.ts.
+const AI_LINK = /\b(?:https?:\/\/|www\.)[^\s)]+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|eu|fr|de|it|es|pt|ch|be|nl|at|uk|jp|kr|cn|tw|in|ca|us|ma|io|info)(?:\/[^\s)]*)?\b/gi;
+
+function withoutLinks(value: string) {
+  return value
+    .replace(AI_LINK, "")
+    .replace(/\(\s*\)/g, "")
+    // « … sur » ou « … via » resté en fin de phrase après le lien retiré.
+    .replace(/\s+(?:sur|via|:)\s*(?=[.,;!?]|$)/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 // Réponse de l'IA = donnée non fiable, revalidée.
 const aiItemSchema = z.object({
   day: z.iso.date(),
   startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-  title: z.string().trim().min(1).transform((value) => value.slice(0, 120)),
+  title: z.string().trim().min(1).transform((value) => withoutLinks(value).slice(0, 120) || value.slice(0, 120)),
   description: z
     .string()
     .trim()
-    .transform((value) => value.slice(0, 500) || null),
+    .transform((value) => withoutLinks(value).slice(0, 500) || null),
   category: z.enum(TRIP_ITEM_CATEGORIES),
   sourcePostId: z.number().int().nullable().optional(),
   // Cherché ensuite chez OpenRouteService : une ligne de texte, sans balise ni caractère de contrôle.
@@ -1071,13 +1141,13 @@ const aiPlanSchema = z.object({
   tasks: z
     .array(
       z.object({
-        label: z.string().trim().min(1).transform((value) => value.slice(0, 120)),
+        label: z.string().trim().min(1).transform((value) => withoutLinks(value).slice(0, 120) || value.slice(0, 120)),
         detail: z
           .string()
           .trim()
           .nullable()
           .optional()
-          .transform((value) => value?.slice(0, 200) || null),
+          .transform((value) => (value ? withoutLinks(value).slice(0, 200) : null) || null),
         done: z.boolean(),
       }),
     )
@@ -1210,9 +1280,11 @@ function wishesBlock(instructions: string | null, memory: string | null = null) 
   return wishes ? [`<envies>\n${wishes}\n</envies>`] : [];
 }
 
-function tripPromptContext({ destinations, archetype, startDate, endDate, travelers }: Omit<PlanRequest, "posts" | "instructions" | "memory">) {
+function tripPromptContext({ destinations, countries, archetype, startDate, endDate, travelers }: Omit<PlanRequest, "posts" | "instructions" | "memory">) {
   return {
     etapes: destinations,
+    // Noms fixes (jamais d'URL) : le planning affiche lui-même les liens officiels correspondants.
+    transportsOfficiels: transportLinks(countries).map((link) => link.name),
     voyageurs: travelers,
     typeDeRecit: archetype,
     debut: startDate,
@@ -1256,6 +1328,7 @@ type ChatRequest = Omit<PlanRequest, "posts"> & {
   message: string;
   now: Awaited<ReturnType<typeof tripNow>>;
   budget: ReturnType<typeof budgetContext>;
+  weather: ForecastResult | null;
 };
 
 const CHAT_SYSTEM_PROMPT = `Tu es le compagnon de voyage de Biirb, un blog de récits de voyageurs : enthousiaste, chaleureux
@@ -1279,6 +1352,12 @@ Tu es son copilote avant ET pendant le voyage :
   d'abord la journée en cours et garde ce qui n'est pas touché.
 - <budget> donne le budget prévu (en euros) et ce qui a déjà été dépensé : sers-t'en pour les questions d'argent et
   pour proposer des options adaptées au reste du budget.
+- <meteo> (si présent) donne les PRÉVISIONS réelles (MET Norway) des prochains jours du voyage, jour par jour : temps
+  en journée, températures, pluie en mm. Elles priment sur la météo moyenne de la saison. Jour de pluie, d'orage ou de
+  neige : propose d'abord des activités abritées et préviens si une activité dehors est compromise (sans la modifier
+  si le voyageur ne demande rien). Grosse chaleur (plus de 32 °C) : dehors tôt le matin ou en fin de journée. Un jour
+  absent de <meteo> n'a pas de prévision : ne l'invente jamais, parle alors de la saison. « incomplet » vrai : une
+  partie des prévisions n'a pas pu être lue, dis-le en quelques mots si la météo compte pour ta réponse.
 - <memoire> contient ce que tu as retenu des échanges précédents (contraintes et préférences durables). Respecte-le.
 - Dans <planning>, une activité marquée « manuel » a été saisie par le voyageur : ne la modifie ou ne la supprime que
   s'il le demande. Une activité marquée « gardée » ne se modifie ni ne se supprime JAMAIS, même s'il le demande dans
@@ -1286,6 +1365,9 @@ Tu es son copilote avant ET pendant le voyage :
 - Une activité marquée « passée » (déjà commencée ou finie, avant la date et l'heure de <maintenant>) ne se modifie ni
   ne se supprime plus, et n'est jamais « touchée » par un imprévu ; rien ne s'ajoute dans un créneau passé :
   replanifie seulement la suite, et n'annonce dans reply que les changements que tu proposes vraiment.
+- Déplacements : garde la logique du parcours (pas de retour dans une ville déjà quittée, excursions à la journée
+  depuis la ville où il dort). Pour un trajet, cite seulement un transporteur ou un pass de « transportsOfficiels »
+  (dans <voyage>) et jamais une adresse web : Biirb affiche lui-même les liens officiels.
 - Distingue ce qui vient d'un récit de la communauté (« d'après un voyageur de la communauté ») de tes estimations :
   horaires, prix et conditions d'accès que tu donnes de toi-même sont à vérifier, dis-le en quelques mots.
 
@@ -1332,6 +1414,8 @@ Ton état d'esprit : tu dis oui aux envies du voyageur et tu cherches comment le
   · retard : décale ou retire ce qui ne tient plus dans la journée, sans rien ajouter ;
   · dépenser moins : remplace les activités et repas chers par des options gratuites ou bon marché ;
   · nouvelle envie : trouve où la caser ce jour-là en bougeant le moins possible le reste.
+  Les alternatives tiennent dans ce qui reste du budget (<budget> : prévu moins dépensé), dans le temps libre, près
+  de « position » ou « lieuIndique » s'il est donné, et selon <meteo> pour ce jour (abrité s'il pleut).
   Propose d'un coup TOUTES les propositions qui remettent la suite de la journée d'aplomb (le voyageur peut tout
   accepter en une fois) : une journée cohérente, sans trou ni chevauchement, sans toucher aux autres activités.
 
@@ -1445,7 +1529,7 @@ const aiChatSchema = z.object({
   reply: z
     .string()
     .trim()
-    .transform((value) => value.slice(0, 1000)),
+    .transform((value) => withoutLinks(value).slice(0, 1000)),
   suggestions: z
     .array(aiItemSchema.extend({ action: z.enum(TRIP_SUGGESTION_ACTIONS), itemId: z.number().int().nullable().optional() }))
     .max(CHAT_MAX_SUGGESTIONS * 2),
@@ -1633,7 +1717,7 @@ function leaksInstructions(reply: string) {
 // Injections typiques (FR/EN), ciblées pour éviter les faux positifs.
 const ATTACK_PATTERNS = [
   /\b(offTopic|sourcePostId|itemId|placeName)\b/i,
-  /<\/?(posts|envies|historique|message|voyage|planning|jour|maintenant|budget|memoire|gardees|system)>/i,
+  /<\/?(posts|envies|historique|message|voyage|planning|jour|maintenant|budget|meteo|memoire|gardees|system)>/i,
   /\b(ignore[rsz]?|oublie[rsz]?|forget|disregard|bypass|override)\b.{0,40}(\b(instructions?|consignes?|r[eè]gles?|rules?|prompt|directives?|security|safety|filtres?|filters?|garde-fous|guardrails?)\b|\bs[ée]curit)/i,
   // « Nouvelle règle : … », « new rule for you » : consigne glissée dans un message (pas « une nouvelle règle de visa ? »).
   /\b(nouvelles?|autres?|new|additional)\s+(r[eè]gles?|rules?|consignes?|instructions?|directives?)\b\s*(:|pour toi|for you|tu dois|you must)/i,
@@ -1650,7 +1734,29 @@ function isPromptAttack(message: string) {
   return ATTACK_PATTERNS.some((pattern) => pattern.test(message));
 }
 
-function buildChatPrompt({ posts, items, history, message, now, budget, ...trip }: ChatRequest) {
+// Libellés fixes pour le modèle (jamais un texte venu d'un service externe tel quel).
+const WEATHER_LABELS: Record<TripWeatherKind, string> = {
+  clear: "ensoleillé",
+  partly: "éclaircies",
+  cloudy: "couvert",
+  fog: "brouillard",
+  rain: "pluie",
+  snow: "neige",
+  storm: "orages",
+};
+
+function weatherBlock(weather: ForecastResult | null) {
+  if (!weather) return [];
+  const forecast = weather.days.map(({ day, kind, min, max, precipitationMm }) => ({
+    date: day,
+    temps: WEATHER_LABELS[kind],
+    temperatures: `${min} à ${max} °C`,
+    pluieMm: precipitationMm,
+  }));
+  return [`<meteo>${JSON.stringify({ previsions: forecast, incomplet: weather.unavailable })}</meteo>`];
+}
+
+function buildChatPrompt({ posts, items, history, message, now, budget, weather, ...trip }: ChatRequest) {
   // Id entre crochets : seule façon pour l'IA de désigner une activité à modifier ou supprimer (revérifié ensuite).
   // Provenance : « manuel » = saisie par le voyageur (à respecter), sinon proposée par Biirbou.
   const planning = items
@@ -1663,6 +1769,7 @@ function buildChatPrompt({ posts, items, history, message, now, budget, ...trip 
     `<voyage>${JSON.stringify(tripPromptContext(trip))}</voyage>`,
     `<maintenant>${JSON.stringify(now)}</maintenant>`,
     `<budget>${JSON.stringify(budget)}</budget>`,
+    ...weatherBlock(weather),
     ...wishesBlock(trip.instructions),
     `<memoire>\n${trip.memory ?? ""}\n</memoire>`,
     `<planning>\n${planning}\n</planning>`,
@@ -1718,6 +1825,9 @@ Règles :
 - <gardees> (facultatif) : activités de ce jour que le voyageur garde ; elles restent telles quelles. Ne les répète pas
   dans items : organise le reste de la journée autour (horaires libres, lieux proches) ; elles comptent dans les 3 à 6.
 - Premier jour du voyage : inclus l'arrivée ; dernier jour : inclus le départ.
+- Garde la ville où le voyageur dort ce jour-là d'après <planning> (pas de changement d'hébergement) ; un lieu à moins
+  de 2 h environ se visite en excursion à la journée avec retour le soir.
+- Un trajet cite seulement un transporteur ou un pass de « transportsOfficiels » (dans <voyage>), jamais une adresse web.
 - Tiens compte de la saison (mois dans <voyage>) : météo, événements, activités possibles à cette période.`;
 
 const DAY_SCHEMA: Schema = {

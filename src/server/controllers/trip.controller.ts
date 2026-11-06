@@ -26,6 +26,7 @@ import {
   updateTrip,
   updateTripItem,
   updateTripTask,
+  getTripWeather,
 } from "@/server/services/trip.service";
 import { getDayTravel } from "@/server/services/trip-travel.service";
 import { resolveTripId, TripAccessError } from "@/server/services/trip-access.service";
@@ -131,6 +132,15 @@ export function getDayTravelController(request: Request, { params }: { params: P
     const { max, windowMs } = getConfig().rateLimits.tripTravel;
     if (isRateLimited(`trips:travel:${userId}`, max, windowMs)) return errorResponse(429, "TOO_MANY_REQUESTS");
     return json(await getDayTravel(userId, tripId, day.data));
+  });
+}
+
+// GET /api/v1/trips/[id]/weather : prévisions des prochains jours du voyage (#26)
+export function getTripWeatherController(request: Request, { params }: { params: Params }) {
+  return withTrip(request, params, async (userId, tripId) => {
+    const { max, windowMs } = getConfig().rateLimits.tripWeather;
+    if (isRateLimited(`trips:weather:${userId}`, max, windowMs)) return errorResponse(429, "TOO_MANY_REQUESTS");
+    return json(await getTripWeather(userId, tripId));
   });
 }
 

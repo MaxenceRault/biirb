@@ -13,6 +13,9 @@ export const TRIP_PDF_TEMPLATES = ["classic", "table", "booklet"] as const;
 export const TRIP_PLAN_CHANGE_KINDS = ["suggestion", "regenerate", "regenerate_day"] as const;
 export type TripPlanChangeKind = (typeof TRIP_PLAN_CHANGE_KINDS)[number];
 export const TRIP_UNDO_HOURS = 24;
+// Temps du jour (prévisions MET Norway), du plus clément au plus gênant pour une activité dehors.
+export const TRIP_WEATHER_KINDS = ["clear", "partly", "cloudy", "fog", "rain", "snow", "storm"] as const;
+export type TripWeatherKind = (typeof TRIP_WEATHER_KINDS)[number];
 // Court : limite le coût par message.
 export const TRIP_MESSAGE_MAX = 500;
 // Modes des temps de trajet (OpenRouteService, comme le type travel_profile) : pas de transports en commun.

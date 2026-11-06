@@ -24,8 +24,11 @@ import { TripConflictDialog, type TripConflict } from "@/components/TripConflict
 import { TripExpenses } from "@/components/TripExpenses";
 import { TripNotificationSettings } from "@/components/TripNotificationSettings";
 import { useOnline } from "@/client/hooks/useOnline";
+import { ItemWarnings } from "@/components/ItemWarnings";
+import { itemWarnings, type ItemWarning } from "@/lib/tripChecks";
 import { useLiveRefresh } from "@/client/hooks/useLiveRefresh";
 import { TripMap, type TripMapData } from "@/components/TripMap";
+import { RouteWarnings, TransportLinksCard } from "@/components/TripTransport";
 import { TripSharePanel, type TripRole } from "@/components/TripSharePanel";
 import { buildTripCsv, downloadFile } from "@/client/tripExport";
 import { TripPassCard, TripPassDialog, type TripPass, type TripPassFeature } from "@/components/TripPassCard";
@@ -33,6 +36,8 @@ import { exportFileName } from "@/lib/fileName";
 import { TripTableView } from "@/components/TripTableView";
 import { TravelCredit, TravelLegRow } from "@/components/TripTravel";
 import { useDayTravel } from "@/client/hooks/useDayTravel";
+import { useTripWeather } from "@/client/hooks/useTripWeather";
+import { DayWeatherLine } from "@/components/TripWeather";
 import {
   TRIP_PDF_TEMPLATES,
   TRIP_UNDO_HOURS,
@@ -479,6 +484,7 @@ export function TripPlanner({ tripId }: { tripId: string }) {
               onBusyChange={setDayBusy}
               onDone={celebrate}
             />
+            <RouteWarnings map={map} lastDay={trip.end_date} />
             {/* Tuiles en ligne uniquement : rien hors connexion. */}
             {online && <TripMap map={map} />}
           </div>
@@ -486,6 +492,9 @@ export function TripPlanner({ tripId }: { tripId: string }) {
             <CopilotCard detail={state.data} onOpen={openCopilot} />
             {!pass.active && <TripPassCard pass={pass} onOpen={() => setPassFeature("info")} />}
             <TaskChecklist tasks={tasks} mutate={mutate} canEdit={canEdit} />
+            <TransportLinksCard
+              countries={[...new Set([trip.destination_country_code, ...trip.destinations.map((place) => place.country_code)])]}
+            />
             <BudgetCard trip={trip} mutate={mutate} canEdit={canEdit} onAsk={() => openCopilot({ kind: "chat", draft: t("copilot.prefill.budget") })} />
           </aside>
         </div>
@@ -795,6 +804,9 @@ function Chip({ icon, children }: { icon: IconName; children: ReactNode }) {
   );
 }
 
+// Même fenêtre que le serveur (trip.service, WEATHER_HORIZON_DAYS).
+const WEATHER_HORIZON_DAYS = 9;
+
 function DayPlanner({
   trip,
   items,
@@ -840,6 +852,9 @@ function DayPlanner({
   const itemsKey = dayItems.map((item) => [item.id, item.start_time, item.title, item.place_name, item.category].join(":")).join("|");
   const travel = useDayTravel(trip.id, day, itemsKey, passActive && online);
   const legs = travel?.travel?.legs ?? [];
+  const weather = useTripWeather(trip.id, online);
+  // Prévisions sur 9 jours environ : au-delà, pas de ligne météo (la saison reste dans la note du voyage).
+  const inForecast = Date.parse(day) - Date.parse(today) <= WEATHER_HORIZON_DAYS * 24 * 60 * 60 * 1000 && day >= today;
 
   async function regenerateDay() {
     if (!passActive) return onLocked("day");
@@ -900,6 +915,7 @@ function DayPlanner({
             {t("days.count", { count: dayItems.length })}
           </span>
         </div>
+        <DayWeatherLine weather={weather} day={day} horizon={inForecast} />
 
         <div className="flex flex-wrap gap-2">
           {canEdit && (
@@ -963,6 +979,7 @@ function DayPlanner({
                 <ItemRow
                   item={item}
                   impact={impacts.find((impact) => impact.item_id === item.id)?.reason}
+                  warnings={itemWarnings(item, items, item.id)}
                   days={days}
                   mutate={mutate}
                   canEdit={canEdit}
@@ -1005,6 +1022,7 @@ function DayPlanner({
 function ItemRow({
   item,
   impact,
+  warnings,
   days,
   mutate,
   canEdit,
@@ -1013,6 +1031,7 @@ function ItemRow({
   item: TripItem;
   // Raison donnée par Biirbou si l'activité est touchée par le dernier imprévu.
   impact?: string;
+  warnings: ItemWarning[];
   days: string[];
   mutate: Mutate;
   canEdit: boolean;
@@ -1100,6 +1119,7 @@ function ItemRow({
             {t("item.impacted", { reason: impact })}
           </p>
         )}
+        <ItemWarnings warnings={warnings} days={days} />
         <ItemOrigin item={item} />
       </div>
       {canEdit && (
