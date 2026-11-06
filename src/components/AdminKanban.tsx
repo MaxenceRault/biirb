@@ -490,8 +490,10 @@ function KanbanColumns({
   }
 
   return (
-    // Une colonne sur mobile, deux à côté du menu de l'admin : jamais de défilement latéral ni de carte trop étroite.
-    <div className="grid gap-4 md:grid-cols-2">
+    // Colonnes selon la place réellement disponible (requête de conteneur, menu de l'admin compris) : une, puis deux,
+    // puis quatre dès 1024 px de large. Jamais de défilement latéral ni de carte trop étroite.
+    <div className="@container">
+      <div className="grid gap-4 @xl:grid-cols-2 @5xl:grid-cols-4">
       {BOARD_COLUMNS.map((column) => {
         const cards = items.filter((item) => item.column === column);
         return (
@@ -570,6 +572,7 @@ function KanbanColumns({
           onSelect={reveal}
         />
       )}
+      </div>
     </div>
   );
 }
