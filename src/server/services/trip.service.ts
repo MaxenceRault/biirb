@@ -4,7 +4,7 @@ import { Type, type Schema } from "@google/genai";
 import { getTranslations } from "next-intl/server";
 import { z } from "zod";
 import { generateJson } from "@/server/infra/ai";
-import { describePlace, findCitiesInText, findPlaceCoordinates, nearestCity, placeCoordinates, placeExists, timeZoneAt } from "@/server/services/location.service";
+import { describePlace, findCitiesInText, findPlaceCoordinates, nearestCity, placeCoordinates, placeExists, timeZoneAt, type CityMatch } from "@/server/services/location.service";
 import { findCachedTravelBetween } from "@/server/repositories/trip-travel.repository";
 import { findPostsForTrip, type PostForTrip } from "@/server/repositories/post.repository";
 import { AiQuotaError, consumeAiCall, getAiQuota } from "@/server/services/ai-quota.service";
@@ -243,6 +243,8 @@ function tripMap(trip: TripRow, items: TripItemRow[]): { pins: MapPin[]; route: 
   return { pins: fallback, route: fallback.map((pin) => [pin.longitude, pin.latitude]) };
 }
 
+const CITY_JUMP_KM = 80;
+
 // Villes citées dans le planning, avec les jours où le voyageur y est (partagé par la carte et l'heure locale).
 function citiesByDay(trip: TripRow, items: TripItemRow[]) {
   const countries = [...new Set([...tripDestinations(trip).map((place) => place.country_code), ...trip.stops.map((stop) => stop.country_code)])];
@@ -252,8 +254,14 @@ function citiesByDay(trip: TripRow, items: TripItemRow[]) {
   const cityOfDay = new Map<string, DayArea>();
   const countryOf = new Map<string, string>();
   const lastOfDay = new Map<string, string>();
+  let here: CityMatch | null = null;
   for (const item of items) {
     for (const city of findCitiesInText(`${item.title}. ${item.description ?? ""}`, countries)) {
+      // Seuls un trajet ou un hébergement déplacent loin le voyageur : un restaurant « Kyoto » à Paris ou « Osaka
+      // Ramen » à Tokyo ne le téléporte pas (activité ou repas au-delà de 80 km de la ville actuelle : ignoré).
+      const moves = item.category === "transport" || item.category === "lodging";
+      if (here && !moves && distanceKm(here, city) > CITY_JUMP_KM) continue;
+      here = city;
       const key = `${city.country}:${city.name}`;
       if (!pins.has(key)) pins.set(key, { name: city.name, latitude: city.latitude, longitude: city.longitude, stays: [], days: new Set() });
       countryOf.set(key, city.country);

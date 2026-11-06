@@ -351,7 +351,7 @@ function DevBoard({ call, admins, visible }: BoardProps) {
                 </p>
                 <PriorityPicker value={ticket.priority} onChange={(priority) => void prioritize(ticket.id, priority)} name={`dev-${ticket.id}`} />
                 <AssigneePicker assignees={ticket.assignees} admins={admins} onChange={(ids) => void assign(ticket.id, ids)} />
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-1">
                   <Button size="sm" variant="secondary" onClick={() => setEditing(ticket.id)} className="gap-1">
                     <Icon name="edit" className="size-3.5" />
                     {t("edit")}
@@ -490,7 +490,10 @@ function KanbanColumns({
   }
 
   return (
-    <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-2 lg:grid lg:grid-cols-4 lg:overflow-visible">
+    // Colonnes selon la place réellement disponible (requête de conteneur, menu de l'admin compris) : une, puis deux,
+    // puis quatre dès 1024 px de large. Jamais de défilement latéral ni de carte trop étroite.
+    <div className="@container">
+      <div className="grid gap-4 @xl:grid-cols-2 @5xl:grid-cols-4">
       {BOARD_COLUMNS.map((column) => {
         const cards = items.filter((item) => item.column === column);
         return (
@@ -503,7 +506,7 @@ function KanbanColumns({
             }}
             onDragLeave={() => setOver((current) => (current === column ? null : current))}
             onDrop={(event) => drop(event, column)}
-            className={`flex w-80 shrink-0 flex-col gap-3 rounded-lg p-3 transition lg:w-auto ${
+            className={`flex min-w-0 flex-col gap-3 rounded-lg p-3 transition ${
               over === column ? "bg-accent/10 ring-2 ring-accent/40" : "bg-surface-muted"
             }`}
           >
@@ -569,6 +572,7 @@ function KanbanColumns({
           onSelect={reveal}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -718,7 +722,7 @@ const PRIORITY_TONES: Record<TicketPriority, string> = {
 function PriorityPicker({ value, onChange, name }: { value: TicketPriority; onChange: (priority: TicketPriority) => void; name: string }) {
   const t = useTranslations("Admin.kanban");
   return (
-    <div role="radiogroup" aria-label={t("priorityLabel")} className="flex gap-1">
+    <div role="radiogroup" aria-label={t("priorityLabel")} className="flex flex-wrap gap-1">
       {TICKET_PRIORITIES.map((priority) => (
         <label
           key={priority}
@@ -757,7 +761,7 @@ function AssigneePicker({ assignees, admins, onChange }: { assignees: Assignee[]
 
   return (
     <div ref={root} className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         {assignees.length > 0 ? (
           <ul aria-label={t("assigneesLabel")} className="flex -space-x-1.5">
             {assignees.map((assignee) => (

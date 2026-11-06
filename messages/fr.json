@@ -139,7 +139,7 @@
           "text": "Biirbou connaît le budget prévu et dépensé ; les dépenses partagées font les comptes, même en plusieurs devises."
         }
       },
-      "honest": "Biirbou ne lit ni la météo ni le trafic en direct : tu lui dis ce qui change, il s'occupe du reste.",
+      "honest": "Biirbou lit la météo des prochains jours, pas le trafic ni les fermetures en direct : tu lui dis ce qui change, il s'occupe du reste.",
       "demo": {
         "name": "Biirbou",
         "question": "Il pleut des cordes, on fait quoi cet après-midi ?",
@@ -1255,7 +1255,7 @@
       "title": "Se déplacer",
       "intro": "Sites officiels des transporteurs et des pass pour les pays de ce voyage. Biirbou indique dans les trajets du planning quand un pass vaut le coup.",
       "verify": "Vérifiez sur le site officiel le prix et ce que couvre un pass avant de l'acheter.",
-      "backtrack": "Parcours : retour à {name} le {back}, quittée le {left}. Si ce n'est pas voulu, demandez à Biirbou de réorganiser pour ne pas revenir sur vos pas."
+      "backtrack": "Parcours : retour à {name} le {back} après l'avoir quittée le {left} ; si ce n'est pas voulu, demandez à Biirbou de réorganiser pour ne pas revenir sur vos pas."
     }
   },
   "Notifications": {

@@ -13,10 +13,10 @@ export function FilterChip({ active, className = "", ...props }: ComponentProps<
   return <button type="button" aria-pressed={active} className={filterChipClassName(active, className)} {...props} />;
 }
 
-// Rangée de puces : défile horizontalement sur petit écran au lieu de passer à la ligne.
+// Rangée de puces : passe à la ligne sur petit écran (jamais de défilement latéral caché).
 export function FilterBar({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <div role="group" aria-label={label} className={`flex items-center gap-2 overflow-x-auto pb-1 ${className}`}>
+    <div role="group" aria-label={label} className={`flex flex-wrap items-center gap-2 ${className}`}>
       {children}
     </div>
   );

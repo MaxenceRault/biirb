@@ -84,10 +84,11 @@ export function ProfileStat({ label, icon, children }: { label: string; icon: Ic
 
 // Barre et onglets du profil (boutons dans ProfileView, liens sur un profil public).
 export const PROFILE_TABS_CLASS_NAME =
-  "flex w-full gap-1 overflow-x-auto rounded-lg border border-line bg-surface-muted p-1.5 sm:w-fit";
+  "flex w-full flex-wrap gap-1 rounded-lg border border-line bg-surface-muted p-1.5 sm:w-fit";
 
+// Sur mobile, les onglets se partagent la largeur et passent à la ligne au lieu d'être coupés.
 export function profileTabClassName(active: boolean) {
-  return `flex shrink-0 items-center gap-1.5 rounded-lg px-4 py-2 font-display text-label-lg whitespace-nowrap transition ${
+  return `flex flex-1 items-center justify-center gap-1.5 rounded-lg px-4 py-2 font-display text-label-lg whitespace-nowrap transition sm:flex-none ${
     active ? "bg-surface text-ink shadow-xs" : "text-ink-soft hover:text-ink"
   }`;
 }

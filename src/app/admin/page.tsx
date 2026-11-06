@@ -16,7 +16,8 @@ export default function AdminPage() {
     <>
       <Navbar />
       <main className="w-full flex-1 pt-24 pb-20">
-        <div className="mx-auto max-w-300 px-4 md:px-6">
+        {/* Plus large que les autres pages : Kanban à 4 colonnes à côté du menu sur un écran d'ordinateur. */}
+        <div className="mx-auto max-w-400 px-4 md:px-6">
           <AdminView />
         </div>
       </main>
