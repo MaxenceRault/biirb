@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { getFormatter, getLocale, getTranslations } from "next-intl/server";
 import { CreateTripLink } from "@/components/CreateTripLink";
 import { HomeHero } from "@/components/HomeHero";
+import { InstallAppButton } from "@/components/InstallAppButton";
 import { LandingCopilotDemo } from "@/components/LandingCopilotDemo";
 import { SectionDots } from "@/components/SectionDots";
 import { StoryCarousel, type CarouselStory } from "@/components/StoryCarousel";
@@ -423,6 +424,7 @@ async function FinalCall() {
           {t("explore")}
         </Link>
       </div>
+      <InstallAppButton />
     </section>
   );
 }
