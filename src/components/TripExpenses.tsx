@@ -228,7 +228,8 @@ export function TripExpenses({ tripId }: { tripId: string }) {
           <BalancesCard ledger={ledger} name={name} mutate={mutate} />
           <PaymentTasksCard ledger={ledger} name={name} mutate={mutate} onPay={(task) => setDraft({ task })} />
           <ParticipantsCard ledger={ledger} mutate={mutate} />
-          {ledger.budget && <BudgetComparison ledger={ledger} />}
+          {/* Budget absent = taux de change du jour indisponible (#68) : dit, jamais remplacé par une estimation. */}
+          {ledger.budget ? <BudgetComparison ledger={ledger} /> : <p className="text-body-sm text-ink-soft">{t("budget.unavailable")}</p>}
         </aside>
       </div>
     </div>

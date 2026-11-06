@@ -325,6 +325,29 @@
       "progressLikes": "{count}/{total} récits aimés",
       "locked": "Pas encore débloqué",
       "error": "Impossible de changer de badge. Réessayez."
+    },
+    "deleteAccount": {
+      "title": "Supprimer mon compte",
+      "intro": "Vos récits, vos photos et votre profil seront supprimés définitivement. Vous verrez avant ce qui arrive à vos voyages.",
+      "open": "Supprimer mon compte…",
+      "dialogTitle": "Supprimer votre compte ?",
+      "dialogText": "C'est définitif : rien ne pourra être récupéré.",
+      "close": "Fermer",
+      "ownedShared": "{count, plural, =0 {Aucun de vos voyages n'est partagé.} one {# voyage partagé passe à un autre membre, qui en devient propriétaire.} other {# voyages partagés passent à un autre membre, qui en devient propriétaire.}}",
+      "ownedAlone": "{count, plural, =0 {Aucun voyage n'est supprimé.} one {# voyage que vous êtes seul à suivre est supprimé, avec ses dépenses.} other {# voyages que vous êtes seul à suivre sont supprimés, avec leurs dépenses.}}",
+      "memberOf": "{count, plural, =0 {Vous n'êtes membre d'aucun voyage d'un autre voyageur.} one {Vous quittez # voyage d'un autre voyageur.} other {Vous quittez # voyages d'autres voyageurs.}}",
+      "stories": "Vos récits, photos, commentaires, likes et enregistrements sont supprimés.",
+      "kept": "Restent, sans lien avec vous : votre nom sur les dépenses déjà partagées avec les autres membres, et vos achats de pass et dons (obligations comptables).",
+      "password": "Votre mot de passe, pour confirmer",
+      "back": "Retour",
+      "confirm": "Supprimer définitivement",
+      "deleting": "Suppression…",
+      "errors": {
+        "INVALID_CREDENTIALS": "Mot de passe incorrect.",
+        "ADMIN_ACCOUNT": "Un compte administrateur ne peut pas être supprimé : demandez d'abord à un autre admin de vous retirer ce rôle.",
+        "TOO_MANY_REQUESTS": "Trop d'essais. Réessayez dans quelques minutes.",
+        "generic": "La suppression n'a pas abouti. Réessayez dans un moment."
+      }
     }
   },
   "PublicProfile": {
@@ -1046,7 +1069,8 @@
       "currency": "Devise du voyage (modifiable tant qu'il n'y a aucune dépense)",
       "budget": {
         "title": "Réel / budget prévu",
-        "row": "{spent} / {planned}"
+        "row": "{spent} / {planned}",
+        "unavailable": "Comparaison avec le budget prévu indisponible : le taux de change du jour ne répond pas. Réessayez dans un moment."
       },
       "errors": {
         "INVALID_INPUT": "Vérifiez le montant et la répartition (les montants doivent faire le total).",
@@ -1097,11 +1121,32 @@
         "chat": "Vous avez atteint la limite de messages de ce voyage. Le pass voyage la multiplie par 4."
       }
     },
+    "weather": {
+      "summary": "{kind}, {min} à {max} °C{rain, plural, =0 {} other {, pluie {rain} mm}}",
+      "summaryAt": "{place} : {kind}, {min} à {max} °C{rain, plural, =0 {} other {, pluie {rain} mm}}",
+      "kinds": {
+        "clear": "ensoleillé",
+        "partly": "éclaircies",
+        "cloudy": "couvert",
+        "fog": "brouillard",
+        "rain": "pluie",
+        "snow": "neige",
+        "storm": "orages"
+      },
+      "source": "Prévisions MET Norway",
+      "unavailable": "Prévisions météo indisponibles pour le moment."
+    },
+    "checks": {
+      "duplicate": "Déjà au programme : « {title} », jour {number} à {time}.",
+      "maybeDuplicate": "Doublon possible avec « {title} », jour {number} à {time}.",
+      "sameTime": "À la même heure que « {title} »."
+    },
     "origin": {
       "post": "Récit de la communauté",
       "ai": "Suggestion de Biirbou",
       "aiHint": "Proposée par Biirbou à partir de ses connaissances : horaires, prix et accès sont à vérifier.",
-      "manual": "Ajout manuel"
+      "manual": "Ajout manuel",
+      "toVerify": "Horaires, prix et accès à vérifier"
     },
     "copilot": {
       "title": "Biirbou, votre copilote",
@@ -1164,7 +1209,8 @@
         "after": "Votre voyage est terminé.",
         "budget": "Budget prévu : {planned} · déjà dépensé : {spent}.",
         "wishes": "Il garde en tête les envies données à la création du voyage.",
-        "plan": "Il voit tout votre programme ({count, plural, =0 {aucune activité} one {# activité} other {# activités}}), y compris vos modifications."
+        "plan": "Il voit tout votre programme ({count, plural, =0 {aucune activité} one {# activité} other {# activités}}), y compris vos modifications.",
+        "limits": "Il ne vérifie pas en direct les horaires, les prix, les réservations ni les fermetures : ses propositions sont à confirmer avant d'y aller."
       },
       "memory": {
         "title": "Ce que Biirbou a retenu",
@@ -1204,6 +1250,12 @@
         "unavailable": "Notifications du navigateur indisponibles ici (elles fonctionnent sur le site en ligne).",
         "error": "Réglage non enregistré. Vérifiez votre connexion puis réessayez."
       }
+    },
+    "transport": {
+      "title": "Se déplacer",
+      "intro": "Sites officiels des transporteurs et des pass pour les pays de ce voyage. Biirbou indique dans les trajets du planning quand un pass vaut le coup.",
+      "verify": "Vérifiez sur le site officiel le prix et ce que couvre un pass avant de l'acheter.",
+      "backtrack": "Parcours : retour à {name} le {back}, quittée le {left}. Si ce n'est pas voulu, demandez à Biirbou de réorganiser pour ne pas revenir sur vos pas."
     }
   },
   "Notifications": {
@@ -1378,6 +1430,24 @@
         "title": "Supprimer le compte de {name} ?",
         "message": "Le compte, ses récits, ses voyages et ses photos sont supprimés définitivement.",
         "action": "Supprimer le compte"
+      },
+      "transactions": "Transactions",
+      "transactionList": {
+        "empty": "Aucun achat ni don pour ce compte.",
+        "kinds": {
+          "trip_pass": "Pass voyage",
+          "donation": "Don mécène"
+        },
+        "free": "Offert",
+        "status": {
+          "active": "Actif",
+          "unassigned": "À rattacher",
+          "refunded": "Remboursé",
+          "revoked": "Retiré",
+          "gift": "Offert"
+        },
+        "trip": "Voyage « {title} » ({id})",
+        "reference": "Réf. Buy Me a Coffee {id}"
       }
     },
     "archetypes": {
@@ -1602,6 +1672,25 @@
         },
         "results": "{count, plural, =0 {Aucun ticket ne correspond} one {# ticket} other {# tickets}}"
       }
+    },
+    "sales": {
+      "title": "Ventes",
+      "from": "Du",
+      "to": "Au",
+      "apply": "Afficher",
+      "period": "Du {from} au {to} (jours de Paris)",
+      "empty": "Aucune vente sur cette période.",
+      "kinds": {
+        "trip_pass": "{count, plural, one {# pass voyage vendu} other {# pass voyage vendus}}",
+        "donation": "{count, plural, one {# don mécène} other {# dons mécène}}"
+      },
+      "refunded": "{count, plural, one {# remboursé} other {# remboursés}} ({amount}), compté dans le brut",
+      "noRefund": "Aucun remboursement",
+      "conversion": "Conversion : {rate} des voyages créés sur la période ont un pass payé ({paid} sur {trips}).",
+      "conversionNone": "Conversion : aucun voyage créé sur la période.",
+      "gifts": "{count, plural, =0 {Aucun pass offert} one {# pass offert} other {# pass offerts}} sur la période.",
+      "pending": "En attente maintenant : {unassigned, plural, =0 {aucun achat à rattacher} one {# achat à rattacher} other {# achats à rattacher}}, {orders, plural, =0 {aucune commande ouverte} one {# commande ouverte} other {# commandes ouvertes}} (24 h).",
+      "failedNote": "Les paiements échoués n'apparaissent pas : Buy Me a Coffee ne prévient Biirb que des paiements réussis."
     }
   },
   "TripExport": {
@@ -1947,7 +2036,7 @@
         {
           "title": "Destinataires et sous-traitants",
           "paragraphs": [
-            "Google Cloud (hébergement, base de données, stockage des photos, journaux) et Google Vertex AI (modèle Gemini : génération des plannings, discussion, y compris la position arrondie ou le lieu que vous choisissez de partager avec « Que faire maintenant ? », vérification des photos), dans l'Union européenne. Buy Me a Coffee (dons et paiement du pass), qui traite vos données de paiement selon sa propre politique, avec des transferts possibles hors de l'Union européenne. Umami Cloud (Umami Software) pour la mesure d'audience, avec des transferts possibles hors de l'Union européenne. OpenRouteService (HeiGIT, Allemagne) pour les temps de trajet du pass voyage : il reçoit seulement le nom du lieu de chaque activité (ou les mots de son titre) et des coordonnées, jamais votre compte, votre email ni votre position. Les images d'illustration peuvent être chargées depuis Unsplash. Vos données ne sont jamais vendues."
+            "Google Cloud (hébergement, base de données, stockage des photos, journaux) et Google Vertex AI (modèle Gemini : génération des plannings, discussion, y compris la position arrondie ou le lieu que vous choisissez de partager avec « Que faire maintenant ? », vérification des photos), dans l'Union européenne. Buy Me a Coffee (dons et paiement du pass), qui traite vos données de paiement selon sa propre politique, avec des transferts possibles hors de l'Union européenne. Umami Cloud (Umami Software) pour la mesure d'audience, avec des transferts possibles hors de l'Union européenne. OpenRouteService (HeiGIT, Allemagne) pour les temps de trajet du pass voyage : il reçoit seulement le nom du lieu de chaque activité (ou les mots de son titre) et des coordonnées, jamais votre compte, votre email ni votre position. MET Norway (institut météorologique norvégien) pour les prévisions météo : il reçoit seulement les coordonnées des villes du voyage, arrondies à environ 1 km, jamais votre compte, votre email ni votre position. Les images d'illustration peuvent être chargées depuis Unsplash. Vos données ne sont jamais vendues."
           ]
         },
         {

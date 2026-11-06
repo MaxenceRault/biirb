@@ -16,7 +16,7 @@ const MAX_FOLLOW_UPS = 3;
 const lastByDay = new Map<string, { itemsKey: string; travel: DayTravel }>();
 
 // Trajets d'une journée (pass voyage), recalculés quand ses activités changent (itemsKey). unavailable : fonction
-// coupée (clé absente) ; le planning s'affiche alors sans trajets.
+// coupée ou en panne ; le planning s'affiche alors sans trajets, avec la mention.
 export function useDayTravel(tripId: string, day: string, itemsKey: string, enabled: boolean) {
   const dayKey = `${tripId}|${day}`;
   const [state, setState] = useState<{ dayKey: string; itemsKey: string; travel: DayTravel | null; unavailable: boolean } | null>(null);
@@ -29,7 +29,8 @@ export function useDayTravel(tripId: string, day: string, itemsKey: string, enab
     async function load() {
       const result = await apiFetch<DayTravel>(`/api/v1/trips/${tripId}/days/${day}/travel`);
       if (cancelled) return;
-      if (!("data" in result)) return setState({ dayKey, itemsKey, travel: null, unavailable: result.error === "TRAVEL_UNAVAILABLE" });
+      // Toute panne est dite (#68) ; seul le pass manquant reste silencieux (la fonction n'est alors pas proposée).
+      if (!("data" in result)) return setState({ dayKey, itemsKey, travel: null, unavailable: result.error !== "PASS_REQUIRED" });
       lastByDay.set(dayKey, { itemsKey, travel: result.data });
       setState({ dayKey, itemsKey, travel: result.data, unavailable: false });
       // En attente à cause du plafond : redemander tout de suite heurterait la même limite.

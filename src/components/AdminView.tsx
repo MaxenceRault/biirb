@@ -132,7 +132,7 @@ type Tab = (typeof TABS)[number];
 const TAB_ICONS: Record<Tab, IconName> = {
   dashboard: "category",
   reports: "flag",
-  tickets: "help",
+  tickets: "kanban",
   posts: "book",
   users: "settings",
   tripPasses: "lock",
@@ -206,46 +206,58 @@ export function AdminView() {
         <p className="text-body-md text-ink-soft">{t("subheading")}</p>
       </header>
 
-      <div role="tablist" aria-label={t("heading")} className="flex gap-2 overflow-x-auto border-b border-line pb-3">
-        {TABS.map((value) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={tab === value}
-            onClick={() => {
-              setTab(value);
-              setError(null);
-            }}
-            className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3.5 py-1.5 font-display text-label-md whitespace-nowrap transition focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:outline-none ${
-              tab === value
-                ? "border-ink bg-ink text-surface"
-                : "border-line bg-surface text-ink-soft hover:border-ink-soft/25 hover:text-ink"
-            }`}
+      {/* Barre latérale sur grand écran (toutes les pages visibles d'un coup) ; sur mobile, les onglets passent à la ligne. */}
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <nav className="lg:sticky lg:top-24">
+          <div
+            role="tablist"
+            aria-label={t("heading")}
+            aria-orientation="vertical"
+            className="flex flex-wrap gap-2 border-b border-line pb-3 lg:flex-col lg:flex-nowrap lg:gap-1 lg:border-b-0 lg:pb-0"
           >
-            <Icon name={TAB_ICONS[value]} className="size-4" />
-            {t(`tabs.${value}`)}
-          </button>
-        ))}
-      </div>
+            {TABS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={tab === value}
+                onClick={() => {
+                  setTab(value);
+                  setError(null);
+                }}
+                className={`flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 font-display text-label-md whitespace-nowrap transition focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:outline-none lg:gap-2.5 lg:px-3 lg:py-2.5 lg:text-left ${
+                  tab === value
+                    ? "border-ink bg-ink text-surface"
+                    : "border-line bg-surface text-ink-soft hover:border-ink-soft/25 hover:text-ink lg:border-transparent lg:bg-transparent lg:hover:bg-surface-muted"
+                }`}
+              >
+                <Icon name={TAB_ICONS[value]} className="size-4 shrink-0" />
+                {t(`tabs.${value}`)}
+              </button>
+            ))}
+          </div>
+        </nav>
 
-      {error && (
-        <div role="alert">
-          <FormError>{t(`errors.${error}`)}</FormError>
+        <div className="flex min-w-0 flex-col gap-6">
+          {error && (
+            <div role="alert">
+              <FormError>{t(`errors.${error}`)}</FormError>
+            </div>
+          )}
+
+          <div role="tabpanel">
+            {tab === "dashboard" && <DashboardTab call={call} onOpen={setTab} />}
+            {tab === "reports" && <ReportsTab call={call} />}
+            {tab === "tickets" && <AdminKanban call={call} currentUserId={currentUserId} />}
+            {tab === "posts" && <PostsTab call={call} />}
+            {tab === "users" && <UsersTab call={call} currentUserId={currentUserId} />}
+            {tab === "tripPasses" && <TripPassesTab call={call} />}
+            {tab === "archetypes" && <ArchetypesTab call={call} />}
+            {tab === "bannedWords" && <BannedWordsTab call={call} />}
+            {tab === "ai" && <AiTab call={call} />}
+            {tab === "journal" && <JournalTab call={call} />}
+          </div>
         </div>
-      )}
-
-      <div role="tabpanel">
-        {tab === "dashboard" && <DashboardTab call={call} onOpen={setTab} />}
-        {tab === "reports" && <ReportsTab call={call} />}
-        {tab === "tickets" && <AdminKanban call={call} currentUserId={currentUserId} />}
-        {tab === "posts" && <PostsTab call={call} />}
-        {tab === "users" && <UsersTab call={call} currentUserId={currentUserId} />}
-        {tab === "tripPasses" && <TripPassesTab call={call} />}
-        {tab === "archetypes" && <ArchetypesTab call={call} />}
-        {tab === "bannedWords" && <BannedWordsTab call={call} />}
-        {tab === "ai" && <AiTab call={call} />}
-        {tab === "journal" && <JournalTab call={call} />}
       </div>
     </div>
   );
@@ -447,6 +459,89 @@ function ReportsTab({ call }: { call: Call }) {
 }
 
 // Achats payés avec un autre email ou sans commande : rattachés après vérification de l'email déclaré par l'acheteur.
+type Sales = {
+  from: string;
+  to: string;
+  sales: { kind: "trip_pass" | "donation"; currency: string; count: number; gross: number; refundedCount: number; refundedAmount: number }[];
+  gifts: number;
+  pending: { unassigned: number; openOrders: number };
+  conversion: { tripsCreated: number; tripsWithPass: number; rate: number | null };
+};
+
+// Ventes d'une période (#108) : brut et remboursements par devise, en attente, conversion voyages → pass.
+function SalesCard({ call }: { call: Call }) {
+  const t = useTranslations("Admin.sales");
+  const format = useFormatter();
+  const [period, setPeriod] = useState<{ from?: string; to?: string }>({});
+  const query = new URLSearchParams(Object.entries(period).filter((entry): entry is [string, string] => Boolean(entry[1])));
+  const { data } = useResource<Sales>(call, `/sales${query.size > 0 ? `?${query}` : ""}`);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    setPeriod({ from: String(values.get("from") || "") || undefined, to: String(values.get("to") || "") || undefined });
+  }
+
+  const money = (amount: number, currency: string) => format.number(amount, { style: "currency", currency });
+
+  return (
+    <Card className="flex flex-col gap-4 p-6">
+      <h2 className="font-display text-headline-sm text-ink">{t("title")}</h2>
+      <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <Field id="sales-from" label={t("from")}>
+          <Input id="sales-from" name="from" type="date" defaultValue={data?.from} />
+        </Field>
+        <Field id="sales-to" label={t("to")}>
+          <Input id="sales-to" name="to" type="date" defaultValue={data?.to} />
+        </Field>
+        <Button type="submit" size="sm" variant="secondary" className="h-11">
+          {t("apply")}
+        </Button>
+      </form>
+      {!data ? (
+        <Skeleton />
+      ) : (
+        <>
+          <p className="text-body-sm text-ink-soft">
+            {t("period", { from: format.dateTime(new Date(data.from), { dateStyle: "medium" }), to: format.dateTime(new Date(data.to), { dateStyle: "medium" }) })}
+          </p>
+          {data.sales.length === 0 ? (
+            <p className="text-body-sm text-ink-soft">{t("empty")}</p>
+          ) : (
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {data.sales.map((row) => (
+                <li key={`${row.kind}-${row.currency}`} className="flex flex-col gap-1 rounded-lg bg-surface-muted p-4">
+                  <span className="text-label-md text-ink-soft">{t(`kinds.${row.kind}`, { count: row.count })}</span>
+                  <span className="font-display text-headline-sm text-ink">{money(row.gross, row.currency)}</span>
+                  <span className="text-label-sm text-ink-soft">
+                    {row.refundedCount > 0
+                      ? t("refunded", { count: row.refundedCount, amount: money(row.refundedAmount, row.currency) })
+                      : t("noRefund")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <ul className="flex flex-col gap-1 text-body-sm text-ink">
+            <li>
+              {data.conversion.rate === null
+                ? t("conversionNone")
+                : t("conversion", {
+                    rate: format.number(data.conversion.rate, { style: "percent", maximumFractionDigits: 1 }),
+                    paid: data.conversion.tripsWithPass,
+                    trips: data.conversion.tripsCreated,
+                  })}
+            </li>
+            <li>{t("gifts", { count: data.gifts })}</li>
+            <li>{t("pending", { unassigned: data.pending.unassigned, orders: data.pending.openOrders })}</li>
+          </ul>
+          <p className="text-label-sm text-ink-soft">{t("failedNote")}</p>
+        </>
+      )}
+    </Card>
+  );
+}
+
 function TripPassesTab({ call }: { call: Call }) {
   const t = useTranslations("Admin");
   const confirm = useConfirm();
@@ -502,6 +597,7 @@ function TripPassesTab({ call }: { call: Call }) {
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="flex flex-col gap-6">
+        <SalesCard call={call} />
         <Card className="flex flex-col gap-4 p-6">
           <div className="flex flex-col gap-1">
             <h2 className="font-display text-headline-sm text-ink">{t("tripPasses.unassignedTitle")}</h2>
@@ -676,6 +772,55 @@ function PostsTab({ call }: { call: Call }) {
   );
 }
 
+type UserTransaction = {
+  kind: "trip_pass" | "donation";
+  id: number;
+  bmc_payment_id: string | null;
+  amount: string | null;
+  currency: string | null;
+  status: "active" | "unassigned" | "refunded" | "revoked" | "gift";
+  trip_public_id: string | null;
+  trip_title: string | null;
+  created_at: string;
+};
+
+// Pass et dons d'un compte (#109) : état, voyage concerné et référence Buy Me a Coffee, pour répondre au support.
+function UserTransactions({ call, userId }: { call: Call; userId: string }) {
+  const t = useTranslations("Admin.users.transactionList");
+  const format = useFormatter();
+  const { data } = useResource<{ transactions: UserTransaction[] }>(call, `/users/${userId}/transactions`);
+  if (!data) return <Skeleton />;
+
+  return (
+    <div className="mt-2 rounded-lg border border-line p-4">
+      {data.transactions.length === 0 ? (
+        <p className="text-body-sm text-ink-soft">{t("empty")}</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {data.transactions.map((transaction) => (
+            <li key={`${transaction.kind}-${transaction.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-sm text-ink">
+              <span className="font-display text-label-lg">{t(`kinds.${transaction.kind}`)}</span>
+              <span>
+                {transaction.amount && transaction.currency
+                  ? format.number(Number(transaction.amount), { style: "currency", currency: transaction.currency })
+                  : t("free")}
+              </span>
+              <Badge tone={transaction.status === "refunded" || transaction.status === "revoked" ? "danger" : "neutral"}>
+                {t(`status.${transaction.status}`)}
+              </Badge>
+              {transaction.trip_public_id && (
+                <span className="text-ink-soft">{t("trip", { title: transaction.trip_title ?? "", id: transaction.trip_public_id })}</span>
+              )}
+              {transaction.bmc_payment_id && <span className="text-label-sm text-ink-soft">{t("reference", { id: transaction.bmc_payment_id })}</span>}
+              <span className="text-label-sm text-ink-soft">{format.dateTime(new Date(transaction.created_at), { dateStyle: "medium", timeStyle: "short" })}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function UsersTab({ call, currentUserId }: { call: Call; currentUserId: string | null }) {
   const t = useTranslations("Admin");
   const confirm = useConfirm();
@@ -684,6 +829,8 @@ function UsersTab({ call, currentUserId }: { call: Call; currentUserId: string |
   const [query, setQuery] = useState({ q: "", page: 1 });
   const params = new URLSearchParams({ page: String(query.page), ...(query.q ? { q: query.q } : {}) });
   const { data, reload } = useResource<Paged<"users", AdminUser>>(call, `/users?${params}`);
+  // Transactions affichées sous un compte à la fois (#109), chargées à l'ouverture seulement.
+  const [transactionsOf, setTransactionsOf] = useState<string | null>(null);
 
   async function act(path: string, method: string, body?: unknown, confirmation?: ConfirmOptions) {
     if (confirmation && !(await confirm(confirmation))) return;
@@ -727,6 +874,15 @@ function UsersTab({ call, currentUserId }: { call: Call; currentUserId: string |
                     </div>
                   </div>
 
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    aria-expanded={transactionsOf === user.id}
+                    onClick={() => setTransactionsOf((current) => (current === user.id ? null : user.id))}
+                    className="shrink-0 self-start md:self-center"
+                  >
+                    {t("users.transactions")}
+                  </Button>
                   {/* Son propre compte : l'API le refuse aussi. */}
                   {!self && (
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -799,6 +955,7 @@ function UsersTab({ call, currentUserId }: { call: Call; currentUserId: string |
                     </div>
                   )}
                 </Card>
+                {transactionsOf === user.id && <UserTransactions call={call} userId={user.id} />}
               </li>
             );
           })}

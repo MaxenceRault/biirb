@@ -74,16 +74,21 @@ export async function refundDonationAndRevokePatron(bmcPaymentId: number): Promi
   const client = await db.connect();
   try {
     await client.query("begin");
-    const { rows } = await client.query<{ user_id: string }>(
+    const { rows } = await client.query<{ user_id: string | null }>(
       `update patron_donation set refunded_at = now()
        where bmc_payment_id = $1 and refunded_at is null
        returning user_id`,
       [bmcPaymentId],
     );
-    const userId = rows[0]?.user_id;
-    if (!userId) {
+    if (rows.length === 0) {
       await client.query("rollback");
       return false;
+    }
+    // Compte supprimé depuis (don gardé sans lien, #112) : le remboursement est noté, il n'y a plus de rôle à rendre.
+    const userId = rows[0].user_id;
+    if (!userId) {
+      await client.query("commit");
+      return true;
     }
 
     await client.query("select 1 from users where id = $1 for update", [userId]);

@@ -49,3 +49,6 @@ export const PROFILE_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as 
 export const profileImageSchema = z.strictObject({
   image: z.file().min(1).max(PROFILE_IMAGE_MAX_BYTES).mime([...PROFILE_IMAGE_TYPES]),
 });
+
+// DELETE /api/v1/users/me (#112) : mot de passe actuel, comme à la connexion.
+export const deleteAccountSchema = z.strictObject({ password: z.string().min(1).max(200) });

@@ -1,15 +1,23 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import bcrypt from "bcryptjs";
+import { logInfo } from "@/server/logger";
 import { detectImage } from "@/server/images";
 import {
+  deletePostPhoto,
   findPostsByAuthor,
+  photoPathFromUrl,
   findSavedPostsByUser,
   type PostSummary,
   type PostSummaryWithAuthor,
 } from "@/server/repositories/post.repository";
 import {
+  deleteAccount,
   deleteAvatar,
+  findAccountDeletionImpact,
   findAvatarUrl,
+  findPasswordCheck,
+  findUserMediaUrls,
   findBadgeState,
   findProfileById,
   findProfileByUsername,
@@ -24,7 +32,9 @@ import type { UpdateProfileInput } from "@/schemas/user.schema";
 import { BADGE_THRESHOLDS, USER_ROLES, type UserRole } from "@/lib/roles";
 
 export class ProfileError extends Error {
-  constructor(public readonly code: "NOT_FOUND" | "USERNAME_TAKEN" | "INVALID_INPUT" | "BADGE_LOCKED") {
+  constructor(
+    public readonly code: "NOT_FOUND" | "USERNAME_TAKEN" | "INVALID_INPUT" | "BADGE_LOCKED" | "INVALID_CREDENTIALS" | "ADMIN_ACCOUNT",
+  ) {
     super(code);
   }
 }
@@ -177,4 +187,33 @@ export async function setMyBadge(userId: string, badge: UserRole | null): Promis
   if (badge !== null && !unlockedBadges(state).has(badge)) throw new ProfileError("BADGE_LOCKED");
   await updateDisplayedBadge(userId, badge === state.role ? null : badge);
   return getMyBadges(userId);
+}
+
+// Avant de confirmer (#112) : voyages transmis à un membre, supprimés, et voyages des autres que le compte quitte.
+export async function getAccountDeletionPreview(userId: string) {
+  const impact = await findAccountDeletionImpact(userId);
+  return { ownedShared: impact.owned_shared, ownedAlone: impact.owned_alone, memberOf: impact.member_of };
+}
+
+// Suppression du compte par son titulaire (#112), mot de passe exigé (un token volé ne suffit pas). Un admin doit
+// d'abord être rétrogradé par un autre admin : l'administration ne se retrouve jamais sans responsable par erreur.
+export async function deleteMyAccount(userId: string, password: string) {
+  const account = await findPasswordCheck(userId);
+  if (!account) throw new ProfileError("NOT_FOUND");
+  if (!account.password_hash || !(await bcrypt.compare(password, account.password_hash))) throw new ProfileError("INVALID_CREDENTIALS");
+  if (account.role === "admin") throw new ProfileError("ADMIN_ACCOUNT");
+
+  const mediaUrls = await findUserMediaUrls(userId);
+  const result = await deleteAccount(userId);
+  if (!result) throw new ProfileError("NOT_FOUND");
+  // Trace de la demande (obligation de preuve), sans donnée personnelle : l'identifiant ne désigne plus personne.
+  logInfo("account", { message: "compte supprimé par son titulaire", userId, ...result });
+
+  // Le compte est supprimé : une photo qui résiste ne fait pas échouer la requête.
+  await Promise.all(
+    mediaUrls.map((url) => {
+      const path = photoPathFromUrl(url);
+      return path ? deletePostPhoto(path).catch(() => {}) : null;
+    }),
+  );
 }

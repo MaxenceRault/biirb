@@ -12,6 +12,12 @@ export const adminPostsQuerySchema = z.strictObject({ q: search, page, visibilit
 
 export const userIdParamSchema = z.uuid();
 
+// Ventes (#108) : période [from, to] en jours de Paris ; sans dates, les 30 derniers jours. Un an au plus.
+export const adminSalesQuerySchema = z
+  .strictObject({ from: z.iso.date().optional(), to: z.iso.date().optional() })
+  .refine(({ from, to }) => !from || !to || (from <= to && Date.parse(to) - Date.parse(from) <= 366 * 24 * 60 * 60 * 1000));
+export type AdminSalesQuery = z.infer<typeof adminSalesQuerySchema>;
+
 export const adminUpdateUserSchema = z
   .strictObject({
     role: z.enum(USER_ROLES),

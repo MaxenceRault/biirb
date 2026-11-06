@@ -4,6 +4,8 @@ import { getConfig } from "@/server/config";
 import { getUserIdFromRequest } from "@/server/jwt";
 import { clientIp, isRateLimited } from "@/server/rateLimit";
 import {
+  deleteMyAccount,
+  getAccountDeletionPreview,
   getMyBadges,
   getMyProfile,
   getPublicProfile,
@@ -13,6 +15,7 @@ import {
   updateMyProfile,
 } from "@/server/services/user.service";
 import {
+  deleteAccountSchema,
   displayedBadgeSchema,
   PROFILE_IMAGE_MAX_BYTES,
   profileImageSchema,
@@ -104,6 +107,38 @@ export async function updateMeController(request: Request) {
   }
 }
 
+// GET /api/v1/users/me/deletion : ce que la suppression du compte ferait aux voyages (#112)
+export async function accountDeletionPreviewController(request: Request) {
+  await connection();
+  const userId = await getUserIdFromRequest(request);
+  if (!userId) return errorResponse(401, "UNAUTHORIZED");
+  try {
+    return Response.json(await getAccountDeletionPreview(userId));
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+// DELETE /api/v1/users/me { password } (#112). Sessions supprimées avec le compte : le cookie de refresh ne sert plus.
+export async function deleteMeController(request: Request) {
+  const userId = await getUserIdFromRequest(request);
+  if (!userId) return errorResponse(401, "UNAUTHORIZED");
+
+  // Comme le login : un mot de passe ne se teste pas en boucle.
+  const { max, windowMs } = getConfig().rateLimits.login;
+  if (isRateLimited(`users:delete:${userId}`, max, windowMs)) return errorResponse(429, "TOO_MANY_REQUESTS");
+
+  const body = deleteAccountSchema.safeParse(await readJson(request));
+  if (!body.success) return errorResponse(400, "INVALID_INPUT");
+
+  try {
+    await deleteMyAccount(userId, body.data.password);
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
 // Marge pour l'enveloppe multipart.
 const MAX_IMAGE_BODY_BYTES = PROFILE_IMAGE_MAX_BYTES + 64 * 1024;
 
@@ -149,6 +184,8 @@ function handleError(error: unknown) {
     if (error.code === "USERNAME_TAKEN") return errorResponse(409, "USERNAME_TAKEN");
     if (error.code === "INVALID_INPUT") return errorResponse(400, "INVALID_INPUT");
     if (error.code === "BADGE_LOCKED") return errorResponse(403, "BADGE_LOCKED");
+    if (error.code === "INVALID_CREDENTIALS") return errorResponse(403, "INVALID_CREDENTIALS");
+    if (error.code === "ADMIN_ACCOUNT") return errorResponse(403, "ADMIN_ACCOUNT");
     return errorResponse(401, "UNAUTHORIZED");
   }
 
